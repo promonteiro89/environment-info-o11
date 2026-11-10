@@ -137,6 +137,7 @@ Returns details of the current HTTP request.
 | `RequestInfo` | Out | [`RequestInfo`](#requestinfo) | The request's details. Empty when there is no HTTP request |
 
 - Outside a request (Timers, BPTs), `IsHttpRequest` is False and every other attribute is empty.
+- In Reactive and Mobile apps, each data action or server action call from the browser is its own request. So the path and URL are those of that call (for example `/MyApp/screenservices/MyApp/MainFlow/Home/DataActionGetData`), not the URL of the screen the user sees.
 - The user agent and referrer are set by the client, so they can be forged.
 - The query string and URL can contain sensitive values, such as tokens. Don't log them blindly.
 - On OutSystems Cloud, the scheme, host and port are the public ones. Behind a proxy that rewrites the host or ends HTTPS before the Front-End, they can be the internal ones. To build links for emails, use `GetEnvironmentHostname` instead.
