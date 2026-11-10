@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'feature/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    # Read-only token: this job only checks out code and builds it.
+    permissions:
+      contents: read
+    env:
+      # Empty on fork PRs (secrets are not exposed) -> build steps skip gracefully.
+      OS_DEPS_KEY: ${{ secrets.OS_DEPS_SSH_KEY }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Notice (secret not available)
+        if: env.OS_DEPS_KEY == ''
+        shell: powershell
+        run: |
+          Write-Host "OS_DEPS_SSH_KEY secret not available (fork PR, or not configured)."
+          Write-Host "The OutSystems platform assemblies cannot be fetched, so the build is skipped."
+
+      - name: Fetch OutSystems platform assemblies (private, read-only)
+        if: env.OS_DEPS_KEY != ''
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: promonteiro89/outsystems-platform-deps
+          ssh-key: ${{ secrets.OS_DEPS_SSH_KEY }}
+          path: os-deps
+
+      - name: Place platform assemblies in Bin
+        if: env.OS_DEPS_KEY != ''
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force Source\NET\Bin | Out-Null
+          Copy-Item os-deps\*.dll Source\NET\Bin\ -Force
+
+      - name: Setup MSBuild
+        if: env.OS_DEPS_KEY != ''
+        uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2
+
+      - name: Build extension (.NET Framework 4.8)
+        if: env.OS_DEPS_KEY != ''
+        shell: powershell
+        run: |
+          msbuild Source\NET\EnvironmentInfo_Ext.csproj /p:Configuration=Release /v:minimal /nologo
+          if ($LASTEXITCODE -ne 0) { exit 1 }
