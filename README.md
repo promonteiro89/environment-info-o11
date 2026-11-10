@@ -5,7 +5,7 @@
 [![.NET](https://img.shields.io/badge/.NET_Framework-4.8-blue.svg)](https://dotnet.microsoft.com/download/dotnet-framework/net48)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An Integration Studio extension (.NET Framework 4.8) that gives OutSystems 11 apps information about the environment they run on: its name, key, hostname and server mode, the Front-End serving the request, the client IP, and server runtime details.
+An Integration Studio extension (.NET Framework 4.8) that gives OutSystems 11 apps information about the environment they run on: its name, key, hostname and server mode, the running module and application, the Front-End serving the request, the current request and client IP, and server runtime details.
 
 ## Table of Contents
 
@@ -15,6 +15,7 @@ An Integration Studio extension (.NET Framework 4.8) that gives OutSystems 11 ap
 - [Data Structures](#data-structures)
 - [Build and Deployment](#build-and-deployment)
 - [Best Practices](#best-practices)
+- [Limitations](#limitations)
 - [Contributing](#contributing)
 - [License](#license)
 
@@ -37,9 +38,9 @@ tests/                              # Unit tests for the client IP resolver (run
 
 ### Design notes
 
-- Environment name, key, server mode and Front-End name come from the platform's `AppInfo`; the hostname is the environment's configured default DNS name (`EspaceProperties.DefaultDnsName`).
+- Environment name, key, server mode, Front-End name and the module and application details come from the platform's `AppInfo`; the hostname is the environment's configured default DNS name (`EspaceProperties.DefaultDnsName`).
 - The extension has no inputs, no credentials, no Site Properties and no third-party dependencies, so there is nothing to configure.
-- Every action only reads state and can be called from any server action, screen, Timer or BPT. Only `GetClientIPAddress` depends on the HTTP request.
+- Every action only reads state and can be called from any server action, screen, Timer or BPT. Only `GetClientIPAddress` and `GetRequestInfo` depend on the HTTP request.
 - The platform reads the server mode from the system database on each call. If that read fails, the platform logs an error and reports `Development`.
 - These actions are server-side diagnostics. Don't return their values to anonymous users, client-side logic or public REST APIs: the environment key, hostname, Front-End name and runtime details help an attacker map your infrastructure.
 - Text outputs are never null: a value the platform can't provide is returned as an empty string.
@@ -99,7 +100,46 @@ Checks whether the environment is configured as a Production environment. It ret
 |---|---|---|---|
 | `IsProductionEnvironment` | Out | Boolean | True if the server mode is Production (Id 4), False otherwise |
 
-It returns False in every other mode, including Disaster Recovery. So "not production" isn't the same as "development": to switch on debug features, check for Development explicitly rather than negating this action.
+It returns False in every other mode, including Disaster Recovery. So "not production" isn't the same as "development": to switch on debug features, use `IsDevelopmentEnvironment` rather than negating this action.
+
+#### `IsDevelopmentEnvironment`, `IsNonProductionEnvironment`, `IsDisasterRecoveryEnvironment`
+Check for the other server modes. Like `IsProductionEnvironment`, each returns a Boolean you can use directly in an If.
+
+| Action | Output (Boolean) | True when the server mode is |
+|---|---|---|
+| `IsDevelopmentEnvironment` | `IsDevelopmentEnvironment` | Development (Id 0) |
+| `IsNonProductionEnvironment` | `IsNonProductionEnvironment` | NonProduction (Id 1), the mode usually used for QA and test environments |
+| `IsDisasterRecoveryEnvironment` | `IsDisasterRecoveryEnvironment` | DisasterRecovery (Id 2) |
+
+Each returns False in every other mode, and when the platform context is unavailable.
+
+#### `GetEnvironmentInfo`
+Returns the environment's name, key, hostname, Front-End name and server mode in one call. It reads the server mode only once, and it has no request data, so it works the same in screens, Timers and BPTs.
+
+| Parameter | Direction | Type | Description |
+|---|---|---|---|
+| `EnvironmentInfo` | Out | [`EnvironmentInfo`](#environmentinfo) | The environment's details |
+
+#### `GetCurrentModuleInfo`
+Returns the name, key and version of the module running the current request or Timer, and its application. Useful for logs and audits.
+
+| Parameter | Direction | Type | Description |
+|---|---|---|---|
+| `ModuleInfo` | Out | [`ModuleInfo`](#moduleinfo) | The module and application details |
+
+Logic in a library runs inside the module that calls it, so a library calling this action gets its consumer's details, not its own.
+
+#### `GetRequestInfo`
+Returns details of the current HTTP request.
+
+| Parameter | Direction | Type | Description |
+|---|---|---|---|
+| `RequestInfo` | Out | [`RequestInfo`](#requestinfo) | The request's details. Empty when there is no HTTP request |
+
+- Outside a request (Timers, BPTs), `IsHttpRequest` is False and every other attribute is empty.
+- The user agent and referrer are set by the client, so they can be forged.
+- The query string and URL can contain sensitive values, such as tokens. Don't log them blindly.
+- On OutSystems Cloud, the scheme, host and port are the public ones. Behind a proxy that rewrites the host or ends HTTPS before the Front-End, they can be the internal ones. To build links for emails, use `GetEnvironmentHostname` instead.
 
 #### `GetFrontEndName`
 Retrieves the name of the Front-End server running the current process. Meant for diagnostics, technical logging and auditing: in a request, it tells you which Front-End handled it; in a Timer or BPT, which Front-End ran the job.
@@ -164,6 +204,39 @@ Runtime details of the server running the action.
 - `Is64BitOS`: Boolean
 - `Is64BitProcess`: Boolean
 
+### `EnvironmentInfo`
+The current environment's details, returned by `GetEnvironmentInfo`.
+- `EnvironmentName`: Text
+- `EnvironmentKey`: Text
+- `Hostname`: Text, the configured default DNS name
+- `FrontEndName`: Text, the Front-End that ran the action
+- `ServerModeId`: Integer, see [`ServerMode`](#servermode) for the values
+- `ServerModeName`: Text
+- `IsProduction`, `IsDevelopment`, `IsNonProduction`, `IsDisasterRecovery`: Boolean, one flag per server mode. All four are False in Management mode.
+
+### `ModuleInfo`
+The running module and its application, returned by `GetCurrentModuleInfo`.
+- `ModuleName`: Text
+- `ModuleKey`: Text, the module's unique key
+- `ModuleId`: Integer, the module's Id in this environment
+- `ModuleVersionId`: Integer, the Id of the published version. It changes on every publish.
+- `ApplicationName`: Text
+- `ApplicationKey`: Text, the application's unique key
+
+### `RequestInfo`
+The current HTTP request, returned by `GetRequestInfo`.
+- `IsHttpRequest`: Boolean, False outside a request
+- `Method`: Text, such as `GET` or `POST`
+- `Scheme`: Text, `http` or `https`
+- `Host`: Text
+- `Port`: Integer
+- `Path`: Text, such as `/MyApp/Home`
+- `QueryString`: Text, without the leading `?`
+- `Url`: Text, the full request URL
+- `UserAgent`: Text
+- `Referrer`: Text, the `Referer` header
+- `IsSecureConnection`: Boolean, True if the connection to the Front-End used HTTPS
+
 ---
 
 ## Build and Deployment
@@ -191,10 +264,17 @@ To publish:
 
 ## Best Practices
 
-- Use the server mode to switch behaviour per environment instead of comparing the environment name, which differs between customers. Enable debug features only when the mode is `Development`, not whenever `IsProductionEnvironment` is False: that would also enable them in Disaster Recovery.
+- Use the server mode to switch behaviour per environment instead of comparing the environment name, which differs between customers. Enable debug features with `IsDevelopmentEnvironment`, not whenever `IsProductionEnvironment` is False: that would also enable them in Disaster Recovery.
+- When you need several environment values, call `GetEnvironmentInfo` once instead of several separate actions: it reads the server mode from the database only once.
 - Keep the outputs server-side. Don't show the environment key, hostname, Front-End name or runtime details to anonymous users or return them from public APIs.
 - Log `GetFrontEndName` with errors and audit entries to trace a request to the Front-End that served it.
 - On OutSystems Cloud, the IP can be used for auditing and rate limiting. On-premises, configure trusted proxies in Service Center before relying on it for security.
+
+---
+
+## Limitations
+
+Environment Info reads values through OutSystems platform assemblies (`OutSystems.HubEdition.RuntimePlatform`) that aren't a documented public API. A platform update can change them without notice, so test your apps after upgrading the platform, and report any issue on GitHub.
 
 ---
 
