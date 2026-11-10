@@ -1,3 +1,7 @@
+# Integration Studio working copy: the folder it extracts EnvironmentInfo_Ext.xif into.
+# Source/NET is the reviewed mirror of that folder's source files.
+EnvironmentInfo_Ext/
+
 # Integration Studio automatic backups (timestamped churn, not source)
 Backups/
 

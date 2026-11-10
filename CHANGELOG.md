@@ -1,14 +1,11 @@
 # Changelog
 
-All notable changes to the Environment Info extension for OutSystems 11 are documented here. Versions follow [Semantic Versioning](https://semver.org/).
+All notable changes to the Environment Info extension for OutSystems 11 are documented here. Versions follow [Semantic Versioning](https://semver.org/) and match the versions published on OutSystems Forge.
 
-## [1.0.0] - 2026-11-10
+## [1.3.0]
 
-First version of the repository: the extension as published in Integration Studio (extension version 1).
+The version on OutSystems Forge when this repository was created. Earlier versions are not recorded here.
 
-### Added
+Actions: `GetEnvironmentName`, `GetEnvironmentKey`, `GetEnvironmentHostname`, `GetEnvironmentServerMode`, `GetEnvironmentServerModes`, `IsProductionEnvironment`, `GetFrontEndName`, `GetClientIPAddress` and `GetRuntimeInfo`. Structures: `ServerMode` and `RuntimeInfo`.
 
-- `GetEnvironmentName`, `GetEnvironmentKey` and `GetEnvironmentHostname`.
-- `GetEnvironmentServerMode`, `GetEnvironmentServerModes` and `IsProductionEnvironment`.
-- `GetFrontEndName`, `GetClientIPAddress` and `GetRuntimeInfo`.
-- `ServerMode` and `RuntimeInfo` structures.
+[1.3.0]: https://github.com/promonteiro89/environment-info-o11/tree/main
