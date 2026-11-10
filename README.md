@@ -40,6 +40,7 @@ Source/NET/                         # Mirror of the .NET source packaged in the 
 - Every action only reads state and can be called from any server action, screen, Timer or BPT. Only `GetClientIPAddress` depends on the HTTP request.
 - The platform reads the server mode from the system database on each call. If that read fails, the platform logs an error and reports `Development`.
 - These actions are server-side diagnostics. Don't return their values to anonymous users, client-side logic or public REST APIs: the environment key, hostname, Front-End name and runtime details help an attacker map your infrastructure.
+- Text outputs are never null: a value the platform can't provide is returned as an empty string.
 
 ---
 
@@ -106,13 +107,13 @@ Retrieves the name of the Front-End server running the current process. Meant fo
 | `FrontEndName` | Out | Text | Name of the Front-End server |
 
 #### `GetClientIPAddress`
-Returns the IP address of the client making the current HTTP request. Front-Ends usually sit behind a load balancer or reverse proxy, so the first entry of the `X-Forwarded-For` header is used when present, and the connection's address otherwise.
+Returns the client IP address of the current HTTP request, using the platform's `RuntimePlatformUtils.GetRequestRealIP`. If trusted proxies are configured in Service Center, the `X-Forwarded-For` header is honoured only when it comes from one of them. Otherwise, the first `X-Forwarded-For` entry is used. Empty or `unknown` entries fall back to the connection's address. It returns an empty string when there's no HTTP request.
 
 | Parameter | Direction | Type | Description |
 |---|---|---|---|
-| `IPAddress` | Out | Text | Client IP address. Empty in non-HTTP contexts (Timers, BPTs, async logic) |
+| `IPAddress` | Out | Text | Client IP address. Empty when there is no HTTP request |
 
-`X-Forwarded-For` is set by the client or by a proxy, so treat the result as informational. Don't use it for access control unless your load balancer overwrites that header.
+The value is informational. It's only trustworthy for security decisions when the trusted proxies setting in Service Center is configured.
 
 #### `GetRuntimeInfo`
 Returns server runtime information, useful for support diagnostics.
@@ -179,7 +180,7 @@ To publish:
 - Use the server mode to switch behaviour per environment instead of comparing the environment name, which differs between customers. Enable debug features only when the mode is `Development`, not whenever `IsProductionEnvironment` is False: that would also enable them in Disaster Recovery.
 - Keep the outputs server-side. Don't show the environment key, hostname, Front-End name or runtime details to anonymous users or return them from public APIs.
 - Log `GetFrontEndName` with errors and audit entries to trace a request to the Front-End that served it.
-- Don't rely on `GetClientIPAddress` in Timers and BPTs: it returns an empty string there.
+- Don't rely on `GetClientIPAddress` in Timers and BPTs: there's no end-user request there.
 
 ---
 
