@@ -7,7 +7,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 	public class CssEnvironmentInfo_Ext: IssEnvironmentInfo_Ext {
 
 		/// <summary>
-		/// Returns the IP address of the client making the current HTTP request, as the platform determines it. When trusted proxies are configured in Service Center, X-Forwarded-For is only honoured from those proxies; otherwise its first entry is used, which the client can forge. Returns an empty string when there is no HTTP request. Treat the value as informational, not for access control.
+		/// Returns the IP address of the client making the current HTTP request. When the platform's trusted proxies are enabled (as on OutSystems Cloud), X-Forwarded-For is read from the right through trusted proxies and CloudFront, so forged entries are ignored. Otherwise the first X-Forwarded-For entry is used, which the client can forge. Ports are stripped and invalid values fall back to the connection address. Returns an empty string when there is no HTTP request.
 		/// </summary>
 		/// <param name="ssIPAddress">Client IP address, or empty when there is no HTTP request.</param>
 		public void MssGetClientIPAddress(out string ssIPAddress) {
@@ -30,38 +30,15 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 				return;
 			}
 
-			// Same resolution the platform uses for its own logs (see GetRealClientIP).
-			ssIPAddress = GetRealClientIP(request) ?? "";
+			// The platform's trusted-proxy rules (Service Center), with CloudFront's origin-facing
+			// ranges also trusted, so OutSystems Cloud returns the visitor and ignores forged headers.
+			// Without trusted proxies, the first X-Forwarded-For entry (as before). See ClientIpResolver.
+			ssIPAddress = ClientIpResolver.Resolve(
+				request.Headers["X-Forwarded-For"], request.UserHostAddress,
+				RuntimePlatformSettings.InternalNetwork.EnableTrustedProxies.GetValue(),
+				RuntimePlatformSettings.InternalNetwork.EnableFallbackToFirstTrustedWhenAllForwardedIPsTrusted.GetValue(),
+				RuntimePlatformUtils.IsFromTrustedProxy) ?? "";
 		} // MssGetClientIPAddress
-
-		// Mirrors RuntimePlatformUtils.GetRequestRealIP, which cannot be called here because its
-		// other overload requires OutSystems.Application.Core, a dependency unavailable in this project.
-		private static string GetRealClientIP(HttpRequest request) {
-			string header = request.Headers["X-Forwarded-For"];
-			if (RuntimePlatformSettings.InternalNetwork.EnableTrustedProxies.GetValue()) {
-				string text = "";
-				bool allTrusted = false;
-				string first = "";
-				if (RuntimePlatformUtils.IsFromTrustedProxy(request.UserHostAddress)) {
-					text = RuntimePlatformUtils.GetTrustedAddressFromForwardHeader(header, out allTrusted, out first);
-				}
-				if (string.IsNullOrEmpty(text)) {
-					if (allTrusted && RuntimePlatformSettings.InternalNetwork.EnableFallbackToFirstTrustedWhenAllForwardedIPsTrusted.GetValue()) {
-						return first;
-					}
-					return request.UserHostAddress;
-				}
-				return text;
-			} else {
-				string text = header;
-				if (text != null && text.IndexOf(',') > 0) {
-					text = text.Substring(0, text.IndexOf(',')).Trim();
-				} else if (string.IsNullOrEmpty(text) || text.ToLower() == "unknown") {
-					text = request.UserHostAddress;
-				}
-				return text;
-			}
-		} // GetRealClientIP
 
 		/// <summary>
 		/// Returns server runtime information: .NET Framework description, OS version, machine name, CPU count and bitness. Useful for support diagnostics. Keep it server-side: it describes your infrastructure. If the server can't read the OS version or machine name, that field is returned empty.
@@ -159,5 +136,375 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		}
 
 	} // CssEnvironmentInfo_Ext
+
+	// <client-ip-resolver>
+	internal static class ClientIpResolver {
+		private static System.Collections.Generic.List<CloudFrontRange> parsedCloudFrontRanges;
+
+		/// <summary>Resolves the client IP without throwing.</summary>
+		public static string Resolve(string forwardedFor, string remoteAddress,
+			bool trustedProxiesEnabled, bool fallbackToFirstTrusted,
+			System.Func<string, bool> isPlatformTrustedProxy) {
+			try {
+				string remote = NormalizeIp(remoteAddress);
+				if (remote == "") {
+					remote = (remoteAddress ?? "").Trim();
+				}
+
+				if (!trustedProxiesEnabled) {
+					string first = null;
+					string normalizedFirst;
+					int firstSeparator;
+					if (forwardedFor != null && forwardedFor.Length != 0) {
+						firstSeparator = forwardedFor.IndexOf(',');
+						first = firstSeparator < 0 ? forwardedFor : forwardedFor.Substring(0, firstSeparator);
+					}
+					normalizedFirst = NormalizeIp(first);
+					return normalizedFirst != "" ? normalizedFirst : remote;
+				}
+
+				if (remote == "" || !IsTrusted(remote, isPlatformTrustedProxy)) {
+					return remote;
+				}
+
+				string lastSeen = "";
+				bool allTrusted = true;
+				if (forwardedFor != null && forwardedFor.Length != 0) {
+					int end = forwardedFor.Length;
+					while (end > 0) {
+						int separator = forwardedFor.LastIndexOf(',', end - 1);
+						int start = separator + 1;
+						string normalized = NormalizeIp(forwardedFor.Substring(start, end - start));
+						if (normalized == "") {
+							allTrusted = false;
+							break;
+						}
+
+						lastSeen = normalized;
+						if (!IsTrusted(normalized, isPlatformTrustedProxy)) {
+							return normalized;
+						}
+
+						if (separator < 0) {
+							break;
+						}
+						end = separator;
+					}
+				}
+
+				if (allTrusted && fallbackToFirstTrusted && lastSeen != "") {
+					return lastSeen;
+				}
+				return remote;
+			} catch {
+				return (remoteAddress ?? "").Trim();
+			}
+		}
+
+		/// <summary>Returns a canonical IP address, or an empty string.</summary>
+		public static string NormalizeIp(string raw) {
+			try {
+				if (System.String.IsNullOrWhiteSpace(raw)) {
+					return "";
+				}
+
+				string candidate = raw.Trim();
+				if (System.String.Equals(candidate, "unknown", System.StringComparison.OrdinalIgnoreCase)) {
+					return "";
+				}
+
+				if (candidate.StartsWith("[", System.StringComparison.Ordinal)) {
+					int closingBracket = candidate.IndexOf(']');
+					if (closingBracket < 1) {
+						return "";
+					}
+					string remainder = candidate.Substring(closingBracket + 1);
+					if (remainder.Length != 0) {
+						if (!remainder.StartsWith(":", System.StringComparison.Ordinal) || !IsValidPort(remainder.Substring(1))) {
+							return "";
+						}
+					}
+					candidate = candidate.Substring(1, closingBracket - 1);
+				} else {
+					int firstColon = candidate.IndexOf(':');
+					if (firstColon >= 0 && firstColon == candidate.LastIndexOf(':') && candidate.IndexOf('.') >= 0) {
+						if (!IsValidPort(candidate.Substring(firstColon + 1))) {
+							return "";
+						}
+						candidate = candidate.Substring(0, firstColon);
+					}
+				}
+
+				int scope = candidate.IndexOf('%');
+				if (scope >= 0) {
+					candidate = candidate.Substring(0, scope);
+				}
+				if (candidate.IndexOf('.') < 0 && candidate.IndexOf(':') < 0) {
+					return "";
+				}
+
+				System.Net.IPAddress address;
+				if (!System.Net.IPAddress.TryParse(candidate, out address)) {
+					return "";
+				}
+				byte[] bytes = address.GetAddressBytes();
+				if (bytes.Length == 4 && CountCharacter(candidate, '.') != 3) {
+					return "";
+				}
+				if (address.IsIPv4MappedToIPv6) {
+					address = address.MapToIPv4();
+				}
+
+				string result = address.ToString();
+				int resultScope = result.IndexOf('%');
+				return resultScope < 0 ? result : result.Substring(0, resultScope);
+			} catch {
+				return "";
+			}
+		}
+
+		/// <summary>Determines whether an IP is CloudFront origin-facing.</summary>
+		public static bool IsCloudFrontOriginFacing(string ip) {
+			try {
+				string normalized = NormalizeIp(ip);
+				System.Net.IPAddress address;
+				if (normalized == "" || !System.Net.IPAddress.TryParse(normalized, out address)) {
+					return false;
+				}
+
+				byte[] addressBytes = address.GetAddressBytes();
+				System.Collections.Generic.List<CloudFrontRange> ranges = GetCloudFrontRanges();
+				int index;
+				for (index = 0; index < ranges.Count; index++) {
+					if (IsInRange(addressBytes, ranges[index])) {
+						return true;
+					}
+				}
+				return false;
+			} catch {
+				return false;
+			}
+		}
+
+		private static bool IsTrusted(string ip, System.Func<string, bool> isPlatformTrustedProxy) {
+			bool platformTrusted = false;
+			try {
+				if (isPlatformTrustedProxy != null) {
+					platformTrusted = isPlatformTrustedProxy(ip);
+				}
+			} catch {
+				platformTrusted = false;
+			}
+			return platformTrusted || IsCloudFrontOriginFacing(ip);
+		}
+
+		private static bool IsValidPort(string port) {
+			int value = 0;
+			int index;
+			if (port.Length == 0) {
+				return false;
+			}
+			for (index = 0; index < port.Length; index++) {
+				char character = port[index];
+				if (character < '0' || character > '9') {
+					return false;
+				}
+				value = (value * 10) + (character - '0');
+				if (value > 65535) {
+					return false;
+				}
+			}
+			return value >= 1;
+		}
+
+		private static int CountCharacter(string value, char character) {
+			int count = 0;
+			int index;
+			for (index = 0; index < value.Length; index++) {
+				if (value[index] == character) {
+					count++;
+				}
+			}
+			return count;
+		}
+
+		private static System.Collections.Generic.List<CloudFrontRange> GetCloudFrontRanges() {
+			System.Collections.Generic.List<CloudFrontRange> ranges = parsedCloudFrontRanges;
+			if (ranges != null) {
+				return ranges;
+			}
+
+			ranges = new System.Collections.Generic.List<CloudFrontRange>();
+			try {
+				string[] prefixes = CloudFrontRanges.Prefixes;
+				int index;
+				for (index = 0; prefixes != null && index < prefixes.Length; index++) {
+					CloudFrontRange range = ParseCloudFrontRange(prefixes[index]);
+					if (range != null) {
+						ranges.Add(range);
+					}
+				}
+			} catch {
+			}
+			parsedCloudFrontRanges = ranges;
+			return ranges;
+		}
+
+		private static CloudFrontRange ParseCloudFrontRange(string prefix) {
+			try {
+				if (System.String.IsNullOrWhiteSpace(prefix)) {
+					return null;
+				}
+				int slash = prefix.IndexOf('/');
+				if (slash <= 0 || slash != prefix.LastIndexOf('/')) {
+					return null;
+				}
+				string normalized = NormalizeIp(prefix.Substring(0, slash));
+				System.Net.IPAddress address;
+				int length;
+				if (normalized == "" || !System.Net.IPAddress.TryParse(normalized, out address) ||
+					!System.Int32.TryParse(prefix.Substring(slash + 1), out length)) {
+					return null;
+				}
+				byte[] bytes = address.GetAddressBytes();
+				if (length < 0 || length > bytes.Length * 8) {
+					return null;
+				}
+				return new CloudFrontRange(bytes, length);
+			} catch {
+				return null;
+			}
+		}
+
+		private static bool IsInRange(byte[] address, CloudFrontRange range) {
+			int fullBytes;
+			int remainingBits;
+			int index;
+			if (address.Length != range.Address.Length) {
+				return false;
+			}
+			fullBytes = range.Length / 8;
+			for (index = 0; index < fullBytes; index++) {
+				if (address[index] != range.Address[index]) {
+					return false;
+				}
+			}
+			remainingBits = range.Length % 8;
+			if (remainingBits == 0) {
+				return true;
+			}
+			int mask = 256 - (1 << (8 - remainingBits));
+			return (address[fullBytes] & mask) == (range.Address[fullBytes] & mask);
+		}
+
+		private sealed class CloudFrontRange {
+			public readonly byte[] Address;
+			public readonly int Length;
+
+			public CloudFrontRange(byte[] address, int length) {
+				Address = address;
+				Length = length;
+			}
+		}
+	}
+	// </client-ip-resolver>
+
+	// <cloudfront-ranges>
+	// Generated by scripts/update-cloudfront-ranges.py from https://ip-ranges.amazonaws.com/ip-ranges.json
+	// (service CLOUDFRONT_ORIGIN_FACING). Do not edit by hand.
+	internal static class CloudFrontRanges {
+		public const string SyncToken = "1794300425";
+		public const string CreateDate = "2026-11-10-08-47-05";
+		public static readonly string[] Prefixes = new string[] {
+				"3.29.57.0/26",
+				"3.172.0.0/18",
+				"3.172.64.0/18",
+				"13.124.199.0/24",
+				"15.158.0.0/16",
+				"18.68.0.0/16",
+				"24.110.128.0/17",
+				"51.74.20.0/24",
+				"51.74.21.0/24",
+				"51.74.22.0/24",
+				"52.46.0.0/18",
+				"52.82.128.0/23",
+				"52.82.134.0/23",
+				"54.182.128.0/20",
+				"54.182.144.0/21",
+				"54.182.154.0/23",
+				"54.182.156.0/22",
+				"54.182.160.0/21",
+				"54.182.172.0/22",
+				"54.182.176.0/21",
+				"54.182.184.0/22",
+				"54.182.188.0/23",
+				"54.182.224.0/21",
+				"54.182.240.0/21",
+				"54.182.248.0/22",
+				"54.239.134.0/23",
+				"54.239.170.0/23",
+				"54.239.204.0/22",
+				"54.239.208.0/21",
+				"64.252.64.0/18",
+				"64.252.128.0/18",
+				"70.132.0.0/18",
+				"130.176.0.0/18",
+				"130.176.64.0/21",
+				"130.176.72.0/22",
+				"130.176.76.0/24",
+				"130.176.78.0/23",
+				"130.176.80.0/22",
+				"130.176.86.0/23",
+				"130.176.88.0/21",
+				"130.176.96.0/19",
+				"130.176.128.0/21",
+				"130.176.136.0/23",
+				"130.176.140.0/22",
+				"130.176.144.0/20",
+				"130.176.160.0/19",
+				"130.176.192.0/19",
+				"204.246.166.0/24",
+				"205.251.218.0/24",
+				"2001:3fc6:4::/48",
+				"2001:3fc6:5::/48",
+				"2001:3fc6:3c::/47",
+				"2406:da10:847f:a100::/56",
+				"2406:da11:438:2300::/56",
+				"2406:da12:4b:c200::/56",
+				"2406:da12:8b2e:9c00::/56",
+				"2406:da14:17bd:2f00::/56",
+				"2406:da14:80bb:ea00::/56",
+				"2406:da16:c01:c200::/56",
+				"2406:da18:9fa:1b00::/56",
+				"2406:da19:e19:4a00::/56",
+				"2406:da1a:6df:6c00::/56",
+				"2406:da1b:e7c:ad00::/56",
+				"2406:da1c:787:2b00::/56",
+				"2406:da1c:8d8c:4600::/56",
+				"2406:da1e:705:1600::/56",
+				"2406:da1f:396:9100::/56",
+				"2600:1f11:e79:a800::/56",
+				"2600:1f13:417:4d00::/56",
+				"2600:1f16:1923:3000::/56",
+				"2600:1f17:4356:f100::/56",
+				"2600:1f18:7530:7200::/56",
+				"2600:1f1a:4568:b500::/56",
+				"2600:1f1c:da:600::/56",
+				"2600:1f1e:a7:2300::/56",
+				"2600:9000:1000::/36",
+				"2600:9000:5200::/40",
+				"2600:9000:6000::/36",
+				"2a05:d011:531:1800::/56",
+				"2a05:d012:581:b400::/56",
+				"2a05:d014:1362:b000::/56",
+				"2a05:d016:9ed:de00::/56",
+				"2a05:d018:1a3a:2d00::/56",
+				"2a05:d019:80b:e300::/56",
+				"2a05:d01a:8a9:be00::/56",
+				"2a05:d01c:343:c300::/56",
+				"2a05:d025:e59:fb00::/56"
+		};
+	}
+	// </cloudfront-ranges>
 
 } // OutSystems.NssEnvironmentInfo_Ext

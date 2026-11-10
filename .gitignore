@@ -45,3 +45,10 @@ Source/NET/Bin/OutSystems.NssEnvironmentInfo.xml
 *.suo
 .vs/
 .DS_Store
+
+# Scratch space for delegated work (never committed)
+.work/
+
+# Test build output
+tests/**/bin/
+tests/**/obj/

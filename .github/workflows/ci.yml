@@ -64,3 +64,22 @@ jobs:
         run: |
           msbuild Source\NET\EnvironmentInfo_Ext.csproj /p:Configuration=Release /v:minimal /nologo
           if ($LASTEXITCODE -ne 0) { exit 1 }
+
+  tests:
+    runs-on: ubuntu-latest
+    # Read-only token: this job only checks out code and runs the unit tests.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Resolver unit tests
+        run: bash tests/run.sh
+
+      # Warning only: an upstream change to the CloudFront ranges must not fail CI.
+      - name: CloudFront ranges up to date (warning only)
+        run: python3 scripts/update-cloudfront-ranges.py --check || echo "::warning::CloudFront ranges changed upstream; see the CloudFront ranges workflow."

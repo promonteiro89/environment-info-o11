@@ -50,7 +50,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		void MssGetFrontEndName(out string ssFrontEndName);
 
 		/// <summary>
-		/// Returns the IP address of the client making the current HTTP request, as the platform determines it. When trusted proxies are configured in Service Center, X-Forwarded-For is only honoured from those proxies; otherwise its first entry is used, which the client can forge. Returns an empty string when there is no HTTP request. Treat the value as informational, not for access control.
+		/// Returns the IP address of the client making the current HTTP request. When the platform&apos;s trusted proxies are enabled (as on OutSystems Cloud), X-Forwarded-For is read from the right through trusted proxies and CloudFront, so forged entries are ignored. Otherwise the first X-Forwarded-For entry is used, which the client can forge. Ports are stripped and invalid values fall back to the connection address. Returns an empty string when there is no HTTP request.
 		/// </summary>
 		/// <param name="ssIPAddress">Client IP address, or empty when there is no HTTP request.</param>
 		void MssGetClientIPAddress(out string ssIPAddress);

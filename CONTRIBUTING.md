@@ -17,11 +17,23 @@
    ```
 2. Make the change in focused commits. Commit the updated `EnvironmentInfo_Ext.xif` and copy its source files into `Source/NET/` in the same commit, so the two never disagree.
 3. Check that the extension compiles with no warnings (Integration Studio Verify, or the MSBuild command above).
-4. There are no automated tests. Check every changed action from a test module, in a screen and in a Timer.
-5. Add your change to CHANGELOG.md.
-6. Open a pull request against `main` that explains the change and why.
+4. Run `bash tests/run.sh`; all tests must pass. It needs the .NET SDK and runs on any OS.
+5. The resolver behind GetClientIPAddress has unit tests (`tests/run.sh`). Check every other changed action live from a test module, in a screen and in a Timer.
+6. Add your change to CHANGELOG.md.
+7. Open a pull request against `main` that explains the change and why.
 
 CI fetches the OutSystems platform assemblies with the private `OS_DEPS_SSH_KEY` secret. GitHub doesn't give secrets to pull requests from forks, so for those CI skips the build and says so in a warning. Build locally before opening a PR from a fork.
+
+## CloudFront ranges
+
+`GetClientIPAddress` needs the AWS CloudFront origin-facing IP ranges. They ship inside the extension, between the `// <cloudfront-ranges>` and `// </cloudfront-ranges>` markers in `Source/NET/EnvironmentInfo_Ext.cs`.
+
+A monthly GitHub workflow (`.github/workflows/cloudfront-ranges.yml`) compares them with `https://ip-ranges.amazonaws.com/ip-ranges.json`. It fails when AWS has changed them. To update:
+
+1. Run `python3 scripts/update-cloudfront-ranges.py`. It rewrites the block in `Source/NET/EnvironmentInfo_Ext.cs`. Use `--check` to compare without writing.
+2. Open `EnvironmentInfo_Ext.xif` in Integration Studio, click **Edit Source Code .NET**, and copy the new block into the source. Run Verify.
+3. Commit the updated `EnvironmentInfo_Ext.xif` and `Source/NET/EnvironmentInfo_Ext.cs` together.
+4. Add a CHANGELOG.md entry, then release a new version.
 
 ## Code conventions
 

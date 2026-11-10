@@ -31,6 +31,8 @@ Source/NET/                         # Mirror of the .NET source packaged in the 
 ├── AssemblyInfo.cs
 ├── Structures.cs / Records.cs / RecordLists.cs / Entities.cs   # Generated OutSystems data types
 └── Bin/                            # Platform assemblies (not committed) and build output
+scripts/                            # update-cloudfront-ranges.py: regenerates the CloudFront IP ranges
+tests/                              # Unit tests for the client IP resolver (run with tests/run.sh)
 ```
 
 ### Design notes
@@ -107,13 +109,25 @@ Retrieves the name of the Front-End server running the current process. Meant fo
 | `FrontEndName` | Out | Text | Name of the Front-End server |
 
 #### `GetClientIPAddress`
-Returns the client IP address of the current HTTP request, using the platform's `RuntimePlatformUtils.GetRequestRealIP`. If trusted proxies are configured in Service Center, the `X-Forwarded-For` header is honoured only when it comes from one of them. Otherwise, the first `X-Forwarded-For` entry is used. Empty or `unknown` entries fall back to the connection's address. It returns an empty string when there's no HTTP request.
+Returns the client IP address of the current HTTP request. It reads the `X-Forwarded-For` header in one of two ways, depending on the trusted proxies setting in Service Center:
+
+- **Trusted proxies enabled** (they are on OutSystems Cloud): the header is read from the right. The platform's trusted proxies and AWS CloudFront's origin-facing IP ranges are skipped, and the first other address is returned. Entries the client adds to the left are ignored.
+- **Trusted proxies disabled** (the usual on-premises default): the first `X-Forwarded-For` entry is returned. The client can set that entry, so it can be forged.
+
+In both modes:
+
+- Ports are removed.
+- IPv6 is returned in lower-case canonical form. IPv4-mapped IPv6 addresses become plain IPv4.
+- Empty, `unknown` or invalid values fall back to the connection's address.
+- It returns an empty string when there's no HTTP request.
 
 | Parameter | Direction | Type | Description |
 |---|---|---|---|
 | `IPAddress` | Out | Text | Client IP address. Empty when there is no HTTP request |
 
-The value is informational. It's only trustworthy for security decisions when the trusted proxies setting in Service Center is configured.
+On OutSystems Cloud, the value is the real visitor's address. On-premises, it's only trustworthy for security decisions after you configure trusted proxies in Service Center.
+
+**Changed in 1.4.0:** On OutSystems Cloud, a request with a forged `X-Forwarded-For` header used to return the forged value. It now returns the real visitor. If you put your own CDN (Cloudflare, Akamai, and so on) in front of OutSystems Cloud, the action now returns that CDN's edge address. To get the visitor's address back, add the CDN's IP ranges as trusted proxies in Service Center.
 
 #### `GetRuntimeInfo`
 Returns server runtime information, useful for support diagnostics.
@@ -180,7 +194,7 @@ To publish:
 - Use the server mode to switch behaviour per environment instead of comparing the environment name, which differs between customers. Enable debug features only when the mode is `Development`, not whenever `IsProductionEnvironment` is False: that would also enable them in Disaster Recovery.
 - Keep the outputs server-side. Don't show the environment key, hostname, Front-End name or runtime details to anonymous users or return them from public APIs.
 - Log `GetFrontEndName` with errors and audit entries to trace a request to the Front-End that served it.
-- Don't rely on `GetClientIPAddress` in Timers and BPTs: there's no end-user request there.
+- On OutSystems Cloud, the IP can be used for auditing and rate limiting. On-premises, configure trusted proxies in Service Center before relying on it for security.
 
 ---
 
