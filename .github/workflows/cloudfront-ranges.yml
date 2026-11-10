@@ -1,0 +1,28 @@
+name: CloudFront ranges
+
+on:
+  schedule:
+    # Monthly, at 06:00 UTC.
+    - cron: "0 6 1 * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    # Read-only token: this job only checks out code and runs the updater.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Check CloudFront origin-facing ranges
+        run: python3 scripts/update-cloudfront-ranges.py --check
+
+      - name: Explain what to do
+        if: ${{ failure() }}
+        run: |
+          echo "::error title=CloudFront ranges changed::The CloudFront origin-facing IP ranges changed (see the added/removed prefixes above). Run 'python3 scripts/update-cloudfront-ranges.py' locally, write the updated EnvironmentInfo_Ext.cs into the .xif, rebuild and release a new version."

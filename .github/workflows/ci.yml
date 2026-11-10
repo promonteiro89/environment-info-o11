@@ -18,20 +18,29 @@ jobs:
     permissions:
       contents: read
     env:
-      # Empty on fork PRs (secrets are not exposed) -> build steps skip gracefully.
-      OS_DEPS_KEY: ${{ secrets.OS_DEPS_SSH_KEY }}
+      # Only whether the secret exists, never its value: the key itself is passed to the
+      # dependency checkout step alone, so the build step (which runs repository code) can't read it.
+      HAS_OS_DEPS_KEY: ${{ secrets.OS_DEPS_SSH_KEY != '' }}
+      IS_FORK_PR: ${{ github.event.pull_request.head.repo.fork == true }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Notice (secret not available)
-        if: env.OS_DEPS_KEY == ''
+      - name: Fork PR without the secret (build skipped)
+        if: env.HAS_OS_DEPS_KEY != 'true' && env.IS_FORK_PR == 'true'
         shell: powershell
         run: |
-          Write-Host "OS_DEPS_SSH_KEY secret not available (fork PR, or not configured)."
-          Write-Host "The OutSystems platform assemblies cannot be fetched, so the build is skipped."
+          Write-Host "::warning title=Build skipped::Pull requests from forks don't receive OS_DEPS_SSH_KEY, so the OutSystems platform assemblies can't be fetched and the extension was NOT compiled. A maintainer builds it before merging."
+          "### Build skipped`n`nThis pull request comes from a fork, so the platform assemblies weren't available and **the extension was not compiled**." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append
+
+      - name: Fail when the secret is missing
+        if: env.HAS_OS_DEPS_KEY != 'true' && env.IS_FORK_PR != 'true'
+        shell: powershell
+        run: |
+          Write-Host "::error title=Missing secret::OS_DEPS_SSH_KEY is not set on this repository, so the extension can't be built. Add it under Settings > Secrets and variables > Actions."
+          exit 1
 
       - name: Fetch OutSystems platform assemblies (private, read-only)
-        if: env.OS_DEPS_KEY != ''
+        if: env.HAS_OS_DEPS_KEY == 'true'
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: promonteiro89/outsystems-platform-deps
@@ -39,19 +48,38 @@ jobs:
           path: os-deps
 
       - name: Place platform assemblies in Bin
-        if: env.OS_DEPS_KEY != ''
+        if: env.HAS_OS_DEPS_KEY == 'true'
         shell: powershell
         run: |
           New-Item -ItemType Directory -Force Source\NET\Bin | Out-Null
           Copy-Item os-deps\*.dll Source\NET\Bin\ -Force
 
       - name: Setup MSBuild
-        if: env.OS_DEPS_KEY != ''
+        if: env.HAS_OS_DEPS_KEY == 'true'
         uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2
 
       - name: Build extension (.NET Framework 4.8)
-        if: env.OS_DEPS_KEY != ''
+        if: env.HAS_OS_DEPS_KEY == 'true'
         shell: powershell
         run: |
           msbuild Source\NET\EnvironmentInfo_Ext.csproj /p:Configuration=Release /v:minimal /nologo
           if ($LASTEXITCODE -ne 0) { exit 1 }
+
+  tests:
+    runs-on: ubuntu-latest
+    # Read-only token: this job only checks out code and runs the unit tests.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Resolver unit tests
+        run: bash tests/run.sh
+
+      # Warning only: an upstream change to the CloudFront ranges must not fail CI.
+      - name: CloudFront ranges up to date (warning only)
+        run: python3 scripts/update-cloudfront-ranges.py --check || echo "::warning::CloudFront ranges changed upstream; see the CloudFront ranges workflow."

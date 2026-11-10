@@ -13,8 +13,8 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 
 	/// <summary>
 	/// Structure <code>STServerModeStructure</code> that represents the Service Studio structure
-	///  <code>ServerMode</code> <p> Description: Contains the details of the current environment'
-	/// s mode.</p>
+	///  <code>ServerMode</code> <p> Description: A platform server mode: the ServerModes enum value (Id
+	/// ) and name (Name).</p>
 	/// </summary>
 	[Serializable()]
 	public partial struct STServerModeStructure: ISerializable, ITypedRecord<STServerModeStructure>, ISimpleRecord {
@@ -215,7 +215,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 
 	/// <summary>
 	/// Structure <code>STRuntimeInfoStructure</code> that represents the Service Studio structure
-	///  <code>RuntimeInfo</code> <p> Description: </p>
+	///  <code>RuntimeInfo</code> <p> Description: Runtime details of the server that ran the action.</p>
 	/// </summary>
 	[Serializable()]
 	public partial struct STRuntimeInfoStructure: ISerializable, ITypedRecord<STRuntimeInfoStructure>, ISimpleRecord {
