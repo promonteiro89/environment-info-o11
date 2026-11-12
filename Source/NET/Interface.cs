@@ -56,15 +56,15 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		void MssGetClientIPAddress(out string ssIPAddress);
 
 		/// <summary>
-		/// Returns server runtime information: .NET Framework description, OS version, machine name, CPU count and bitness. Useful for support diagnostics. Keep it server-side: it describes your infrastructure. If the server can&apos;t read the OS version or machine name, that field is returned empty.
+		/// Returns server runtime information: .NET Framework description, OS version, machine name, CPU count and bitness. Useful for support diagnostics. Keep it server-side: it describes your infrastructure. If the server can&apos;t read the framework description, OS version or machine name, that field is returned empty.
 		/// </summary>
 		/// <param name="ssRuntimeInfo">Server runtime details.</param>
 		void MssGetRuntimeInfo(out RCRuntimeInfoRecord ssRuntimeInfo);
 
 		/// <summary>
-		/// Checks whether the current environment&apos;s server mode is Development. Use it to turn on debug features: unlike &quot;not IsProductionEnvironment&quot;, it stays False in Disaster Recovery. Ideal for If widgets and conditions.
+		/// Checks whether the current environment&apos;s server mode is Development. Unlike &quot;not IsProductionEnvironment&quot;, it stays False in Disaster Recovery. Ideal for If widgets and conditions. If the platform can&apos;t read the server mode, it reports Development, so this also returns True then: don&apos;t let it alone expose sensitive debug features.
 		/// </summary>
-		/// <param name="ssIsDevelopmentEnvironment">True if the server mode is Development (Id 0). False otherwise, or if the platform context is unavailable.</param>
+		/// <param name="ssIsDevelopmentEnvironment">True if the server mode is Development (Id 0), including when the platform can&apos;t read the server mode and reports Development. False otherwise, or if the platform context is unavailable.</param>
 		void MssIsDevelopmentEnvironment(out bool ssIsDevelopmentEnvironment);
 
 		/// <summary>
@@ -80,7 +80,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		void MssIsDisasterRecoveryEnvironment(out bool ssIsDisasterRecoveryEnvironment);
 
 		/// <summary>
-		/// Returns the current environment&apos;s name, key, hostname, Front-End name and server mode in one call, reading the server mode only once. Works the same in screens, Timers and BPTs. Keep it server-side: it describes your infrastructure.
+		/// Returns the current environment&apos;s name, key, hostname, Front-End name and server mode in one call, reading the server mode only once. Works the same in screens, Timers and BPTs. Keep it server-side: it describes your infrastructure. If the platform can&apos;t read the server mode, it reports Development.
 		/// </summary>
 		/// <param name="ssEnvironmentInfo">The environment&apos;s details. Values the platform can&apos;t provide are empty, 0 or False.</param>
 		void MssGetEnvironmentInfo(out RCEnvironmentInfoRecord ssEnvironmentInfo);

@@ -191,6 +191,12 @@ def main(argv=None):
 
     sync_token, create_date, prefixes, n_ipv4, n_ipv6 = load_ranges(args.input)
 
+    # An empty list would stop GetClientIPAddress from trusting CloudFront at all,
+    # so a feed without CloudFront ranges (truncated or reshaped) is an error.
+    if not prefixes:
+        sys.stderr.write("error: no %s ranges found in the input; nothing was written\n" % SERVICE)
+        return 2
+
     # Resolve the target path relative to the repo root (parent of scripts/).
     if args.target is None:
         repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

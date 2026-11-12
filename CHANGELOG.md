@@ -2,6 +2,24 @@
 
 All notable changes to the Environment Info extension for OutSystems 11 are documented here. Versions follow [Semantic Versioning](https://semver.org/) and match the versions published on OutSystems Forge.
 
+## [1.5.1]
+
+Fixes from an independent review of 1.5.0. No action or structure was added, removed or renamed.
+
+### Fixed
+
+- The Text attributes of `EnvironmentInfo`, `ModuleInfo` and `RequestInfo` were 50 characters long, so an entity created from these structures cut off URLs and user agents. `Url`, `Path`, `QueryString` and `Referrer` are now 2000 characters, `UserAgent` 500, and names, hosts and the hostname 250. Keys and the server mode name stay at 50.
+- `GetEnvironmentName`, `GetEnvironmentKey`, `GetFrontEndName`, `IsProductionEnvironment`, `GetEnvironmentServerMode` and `GetEnvironmentHostname` could still throw when the platform lookup failed, for example on a licensing or system database error. They now return an empty string, `False` or an empty `ServerMode`, like the 1.5.0 actions.
+- `GetClientIPAddress` could throw if the request headers or the trusted-proxy settings couldn't be read. It now returns the connection address instead, never the forgeable `X-Forwarded-For`.
+- `GetRuntimeInfo` could throw on hosts that refuse to give the framework description, OS version or machine name. That value is now returned empty.
+- `scripts/update-cloudfront-ranges.py` wrote an empty range list when the AWS feed had no CloudFront ranges. It now stops with an error and leaves the file unchanged.
+
+### Documentation
+
+- `IsDevelopmentEnvironment` and `GetEnvironmentInfo`: when the platform can't read the server mode, it reports Development, so `IsDevelopmentEnvironment` returns True even in Production. Don't use it alone to expose sensitive debug features.
+- `GetRequestInfo`: the scheme, host, port and HTTPS flag describe the connection the Front-End received, on OutSystems Cloud too. The README no longer says they are always the public ones there.
+- The README lists the length of every Text attribute in the new structures.
+
 ## [1.5.0]
 
 New actions only. The existing actions and structures are unchanged, so current consumers don't need to change anything.

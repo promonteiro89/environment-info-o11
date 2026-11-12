@@ -7,9 +7,9 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 	public class CssEnvironmentInfo_Ext: IssEnvironmentInfo_Ext {
 
 		/// <summary>
-		/// Checks whether the current environment&apos;s server mode is Development. Use it to turn on debug features: unlike &quot;not IsProductionEnvironment&quot;, it stays False in Disaster Recovery. Ideal for If widgets and conditions.
+		/// Checks whether the current environment&apos;s server mode is Development. Unlike &quot;not IsProductionEnvironment&quot;, it stays False in Disaster Recovery. Ideal for If widgets and conditions. If the platform can&apos;t read the server mode, it reports Development, so this also returns True then: don&apos;t let it alone expose sensitive debug features.
 		/// </summary>
-		/// <param name="ssIsDevelopmentEnvironment">True if the server mode is Development (Id 0). False otherwise, or if the platform context is unavailable.</param>
+		/// <param name="ssIsDevelopmentEnvironment">True if the server mode is Development (Id 0), including when the platform can&apos;t read the server mode and reports Development. False otherwise, or if the platform context is unavailable.</param>
 		public void MssIsDevelopmentEnvironment(out bool ssIsDevelopmentEnvironment) {
 			ssIsDevelopmentEnvironment = false;
 			try {
@@ -49,7 +49,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		} // MssIsDisasterRecoveryEnvironment
 
 		/// <summary>
-		/// Returns the current environment&apos;s name, key, hostname, Front-End name and server mode in one call, reading the server mode only once. Works the same in screens, Timers and BPTs. Keep it server-side: it describes your infrastructure.
+		/// Returns the current environment&apos;s name, key, hostname, Front-End name and server mode in one call, reading the server mode only once. Works the same in screens, Timers and BPTs. Keep it server-side: it describes your infrastructure. If the platform can&apos;t read the server mode, it reports Development.
 		/// </summary>
 		/// <param name="ssEnvironmentInfo">The environment&apos;s details. Values the platform can&apos;t provide are empty, 0 or False.</param>
 		public void MssGetEnvironmentInfo(out RCEnvironmentInfoRecord ssEnvironmentInfo) {
@@ -177,7 +177,6 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 			}
 		} // MssGetRequestInfo
 
-
 		/// <summary>
 		/// Returns the IP address of the client making the current HTTP request. When the platform's trusted proxies are enabled (as on OutSystems Cloud), X-Forwarded-For is read from the right through trusted proxies and CloudFront, so forged entries are ignored. Otherwise the first X-Forwarded-For entry is used, which the client can forge. Ports are stripped and invalid values fall back to the connection address. Returns an empty string when there is no HTTP request.
 		/// </summary>
@@ -205,30 +204,47 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 			// The platform's trusted-proxy rules (Service Center), with CloudFront's origin-facing
 			// ranges also trusted, so OutSystems Cloud returns the visitor and ignores forged headers.
 			// Without trusted proxies, the first X-Forwarded-For entry (as before). See ClientIpResolver.
-			ssIPAddress = ClientIpResolver.Resolve(
-				request.Headers["X-Forwarded-For"], request.UserHostAddress,
-				RuntimePlatformSettings.InternalNetwork.EnableTrustedProxies.GetValue(),
-				RuntimePlatformSettings.InternalNetwork.EnableFallbackToFirstTrustedWhenAllForwardedIPsTrusted.GetValue(),
-				RuntimePlatformUtils.IsFromTrustedProxy) ?? "";
+			try {
+				ssIPAddress = ClientIpResolver.Resolve(
+					request.Headers["X-Forwarded-For"], request.UserHostAddress,
+					RuntimePlatformSettings.InternalNetwork.EnableTrustedProxies.GetValue(),
+					RuntimePlatformSettings.InternalNetwork.EnableFallbackToFirstTrustedWhenAllForwardedIPsTrusted.GetValue(),
+					RuntimePlatformUtils.IsFromTrustedProxy) ?? "";
+			} catch {
+				// The headers or the trusted-proxy settings couldn't be read. Return the connection
+				// address, never X-Forwarded-For: without the settings we can't tell a forged entry.
+				try {
+					string remote = request.UserHostAddress;
+					string normalized = ClientIpResolver.NormalizeIp(remote);
+					ssIPAddress = normalized != "" ? normalized : (remote ?? "").Trim();
+				} catch {
+					ssIPAddress = "";
+				}
+			}
 		} // MssGetClientIPAddress
 
 		/// <summary>
-		/// Returns server runtime information: .NET Framework description, OS version, machine name, CPU count and bitness. Useful for support diagnostics. Keep it server-side: it describes your infrastructure. If the server can't read the OS version or machine name, that field is returned empty.
+		/// Returns server runtime information: .NET Framework description, OS version, machine name, CPU count and bitness. Useful for support diagnostics. Keep it server-side: it describes your infrastructure. If the server can&apos;t read the framework description, OS version or machine name, that field is returned empty.
 		/// </summary>
 		/// <param name="ssRuntimeInfo">Server runtime details.</param>
 		public void MssGetRuntimeInfo(out RCRuntimeInfoRecord ssRuntimeInfo) {
 			ssRuntimeInfo = new RCRuntimeInfoRecord(null);
 
-			ssRuntimeInfo.ssSTRuntimeInfo.ssCLRVersion = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription ?? "";
+			// Each value is read on its own, so one the host refuses (for example a locked-down
+			// IIS application pool) doesn't blank the others.
+			try {
+				ssRuntimeInfo.ssSTRuntimeInfo.ssCLRVersion = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription ?? "";
+			} catch {
+				ssRuntimeInfo.ssSTRuntimeInfo.ssCLRVersion = "";
+			}
 			try {
 				ssRuntimeInfo.ssSTRuntimeInfo.ssOSVersion = Environment.OSVersion.ToString();
-			} catch (InvalidOperationException) {
+			} catch {
 				ssRuntimeInfo.ssSTRuntimeInfo.ssOSVersion = "";
 			}
 			try {
 				ssRuntimeInfo.ssSTRuntimeInfo.ssMachineName = Environment.MachineName;
-			} catch (InvalidOperationException) {
-				// The computer name can't be read on some locked-down hosts.
+			} catch {
 				ssRuntimeInfo.ssSTRuntimeInfo.ssMachineName = "";
 			}
 			ssRuntimeInfo.ssSTRuntimeInfo.ssProcessorCount = Environment.ProcessorCount;
@@ -241,8 +257,13 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		/// </summary>
 		/// <param name="ssFrontEndName">Name of the Front-End server.</param>
 		public void MssGetFrontEndName(out string ssFrontEndName) {
-			AppInfo info = AppInfo.GetAppInfo();
-			ssFrontEndName = info != null ? (info.FrontendName ?? "") : "";
+			ssFrontEndName = "";
+			try {
+				AppInfo info = AppInfo.GetAppInfo();
+				ssFrontEndName = info != null ? (info.FrontendName ?? "") : "";
+			} catch {
+				ssFrontEndName = "";
+			}
 		} // MssGetFrontEndName
 
 		/// <summary>
@@ -250,8 +271,13 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		/// </summary>
 		/// <param name="ssEnvironmentKey">Key of the environment.</param>
 		public void MssGetEnvironmentKey(out string ssEnvironmentKey) {
-			AppInfo info = AppInfo.GetAppInfo();
-			ssEnvironmentKey = info != null ? (info.EnvironmentKey ?? "") : "";
+			ssEnvironmentKey = "";
+			try {
+				AppInfo info = AppInfo.GetAppInfo();
+				ssEnvironmentKey = info != null ? (info.EnvironmentKey ?? "") : "";
+			} catch {
+				ssEnvironmentKey = "";
+			}
 		} // MssGetEnvironmentKey
 
 		/// <summary>
@@ -259,8 +285,13 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		/// </summary>
 		/// <param name="ssEnvironmentName">Name of the environment.</param>
 		public void MssGetEnvironmentName(out string ssEnvironmentName) {
-			AppInfo info = AppInfo.GetAppInfo();
-			ssEnvironmentName = info != null ? (info.EnvironmentName ?? "") : "";
+			ssEnvironmentName = "";
+			try {
+				AppInfo info = AppInfo.GetAppInfo();
+				ssEnvironmentName = info != null ? (info.EnvironmentName ?? "") : "";
+			} catch {
+				ssEnvironmentName = "";
+			}
 		} // MssGetEnvironmentName
 
 		/// <summary>
@@ -279,8 +310,13 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		/// </summary>
 		/// <param name="ssIsProductionEnvironment">True if the server mode is Production (Id 4). False otherwise, or if the platform context is unavailable.</param>
 		public void MssIsProductionEnvironment(out bool ssIsProductionEnvironment) {
-			AppInfo info = AppInfo.GetAppInfo();
-			ssIsProductionEnvironment = info != null && info.ServerMode == ServerModes.Production;
+			ssIsProductionEnvironment = false;
+			try {
+				AppInfo info = AppInfo.GetAppInfo();
+				ssIsProductionEnvironment = info != null && info.ServerMode == ServerModes.Production;
+			} catch {
+				ssIsProductionEnvironment = false;
+			}
 		} // MssIsProductionEnvironment
 
 		/// <summary>
@@ -288,8 +324,15 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		/// </summary>
 		/// <param name="ssServerMode">The current server mode.</param>
 		public void MssGetEnvironmentServerMode(out RCServerModeRecord ssServerMode) {
-			AppInfo info = AppInfo.GetAppInfo();
-			ssServerMode = info != null ? ToServerModeRecord(info.ServerMode) : new RCServerModeRecord(null);
+			ssServerMode = new RCServerModeRecord(null);
+			try {
+				AppInfo info = AppInfo.GetAppInfo();
+				if (info != null) {
+					ssServerMode = ToServerModeRecord(info.ServerMode);
+				}
+			} catch {
+				ssServerMode = new RCServerModeRecord(null);
+			}
 		} // MssGetEnvironmentServerMode
 
 		/// <summary>
@@ -297,7 +340,12 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		/// </summary>
 		/// <param name="ssHostname">The environment's default DNS name, or empty if none is configured.</param>
 		public void MssGetEnvironmentHostname(out string ssHostname) {
-			ssHostname = new EspaceProperties().DefaultDnsName ?? "";
+			ssHostname = "";
+			try {
+				ssHostname = new EspaceProperties().DefaultDnsName ?? "";
+			} catch {
+				ssHostname = "";
+			}
 		} // MssGetEnvironmentHostname
 
 		private static RCServerModeRecord ToServerModeRecord(ServerModes mode) {

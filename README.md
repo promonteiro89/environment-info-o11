@@ -113,6 +113,8 @@ Check for the other server modes. Like `IsProductionEnvironment`, each returns a
 
 Each returns False in every other mode, and when the platform context is unavailable.
 
+If the platform can't read the server mode from the system database, it logs an error and reports Development. `IsDevelopmentEnvironment` then returns True, even in Production. Don't let it alone expose sensitive debug features, such as test endpoints or stack traces shown to users.
+
 #### `GetEnvironmentInfo`
 Returns the environment's name, key, hostname, Front-End name and server mode in one call. It reads the server mode only once, and it has no request data, so it works the same in screens, Timers and BPTs.
 
@@ -140,7 +142,7 @@ Returns details of the current HTTP request.
 - In Reactive and Mobile apps, each data action or server action call from the browser is its own request. So the path and URL are those of that call (for example `/MyApp/screenservices/MyApp/MainFlow/Home/DataActionGetData`), not the URL of the screen the user sees.
 - The user agent and referrer are set by the client, so they can be forged.
 - The query string and URL can contain sensitive values, such as tokens. Don't log them blindly.
-- On OutSystems Cloud, the scheme, host and port are the public ones. Behind a proxy that rewrites the host or ends HTTPS before the Front-End, they can be the internal ones. To build links for emails, use `GetEnvironmentHostname` instead.
+- The scheme, host, port and `IsSecureConnection` describe the connection the Front-End received. Behind a load balancer or proxy that rewrites the host or ends HTTPS before the Front-End, they can be the internal ones, such as `http` and port 80 for an HTTPS visitor. To build links for emails, use `GetEnvironmentHostname` instead.
 
 #### `GetFrontEndName`
 Retrieves the name of the Front-End server running the current process. Meant for diagnostics, technical logging and auditing: in a request, it tells you which Front-End handled it; in a Timer or BPT, which Front-End ran the job.
@@ -175,7 +177,7 @@ Returns server runtime information, useful for support diagnostics.
 
 | Parameter | Direction | Type | Description |
 |---|---|---|---|
-| `RuntimeInfo` | Out | `RuntimeInfo` | CLR version, OS, machine name, CPU count and bitness |
+| `RuntimeInfo` | Out | `RuntimeInfo` | CLR version, OS, machine name, CPU count and bitness. A value the server refuses to read is returned empty. |
 
 ---
 
@@ -207,35 +209,35 @@ Runtime details of the server running the action.
 
 ### `EnvironmentInfo`
 The current environment's details, returned by `GetEnvironmentInfo`.
-- `EnvironmentName`: Text
-- `EnvironmentKey`: Text
-- `Hostname`: Text, the configured default DNS name
-- `FrontEndName`: Text, the Front-End that ran the action
+- `EnvironmentName`: Text (250)
+- `EnvironmentKey`: Text (50)
+- `Hostname`: Text (250), the configured default DNS name
+- `FrontEndName`: Text (250), the Front-End that ran the action
 - `ServerModeId`: Integer, see [`ServerMode`](#servermode) for the values
-- `ServerModeName`: Text
+- `ServerModeName`: Text (50)
 - `IsProduction`, `IsDevelopment`, `IsNonProduction`, `IsDisasterRecovery`: Boolean, one flag per server mode. All four are False in Management mode.
 
 ### `ModuleInfo`
 The running module and its application, returned by `GetCurrentModuleInfo`.
-- `ModuleName`: Text
-- `ModuleKey`: Text, the module's unique key
+- `ModuleName`: Text (250)
+- `ModuleKey`: Text (50), the module's unique key
 - `ModuleId`: Integer, the module's Id in this environment
 - `ModuleVersionId`: Integer, the Id of the published version. It changes on every publish.
-- `ApplicationName`: Text
-- `ApplicationKey`: Text, the application's unique key
+- `ApplicationName`: Text (250)
+- `ApplicationKey`: Text (50), the application's unique key
 
 ### `RequestInfo`
 The current HTTP request, returned by `GetRequestInfo`.
 - `IsHttpRequest`: Boolean, False outside a request
-- `Method`: Text, such as `GET` or `POST`
-- `Scheme`: Text, `http` or `https`
-- `Host`: Text
+- `Method`: Text (50), such as `GET` or `POST`
+- `Scheme`: Text (50), `http` or `https`
+- `Host`: Text (250)
 - `Port`: Integer
-- `Path`: Text, such as `/MyApp/Home`
-- `QueryString`: Text, without the leading `?`
-- `Url`: Text, the full request URL
-- `UserAgent`: Text
-- `Referrer`: Text, the `Referer` header
+- `Path`: Text (2000), such as `/MyApp/Home`
+- `QueryString`: Text (2000), without the leading `?`
+- `Url`: Text (2000), the full request URL
+- `UserAgent`: Text (500)
+- `Referrer`: Text (2000), the `Referer` header
 - `IsSecureConnection`: Boolean, True if the connection to the Front-End used HTTPS
 
 ---
@@ -265,7 +267,7 @@ To publish:
 
 ## Best Practices
 
-- Use the server mode to switch behaviour per environment instead of comparing the environment name, which differs between customers. Enable debug features with `IsDevelopmentEnvironment`, not whenever `IsProductionEnvironment` is False: that would also enable them in Disaster Recovery.
+- Use the server mode to switch behaviour per environment instead of comparing the environment name, which differs between customers. Enable debug features with `IsDevelopmentEnvironment`, not whenever `IsProductionEnvironment` is False: that would also enable them in Disaster Recovery. Keep sensitive ones behind a role or a Site Property too, because a failed server mode read reports Development.
 - When you need several environment values, call `GetEnvironmentInfo` once instead of several separate actions: it reads the server mode from the database only once.
 - Keep the outputs server-side. Don't show the environment key, hostname, Front-End name or runtime details to anonymous users or return them from public APIs.
 - Log `GetFrontEndName` with errors and audit entries to trace a request to the Front-End that served it.
