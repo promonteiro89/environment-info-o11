@@ -4,7 +4,7 @@ All notable changes to the Environment Info extension for OutSystems 11 are docu
 
 ## [1.5.1]
 
-Fixes from an independent review of 1.5.0. No action or structure was added, removed or renamed.
+Fixes for issues found in 1.5.0. No action or structure was added, removed or renamed.
 
 ### Fixed
 
