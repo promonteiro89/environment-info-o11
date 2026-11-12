@@ -2,6 +2,18 @@
 
 All notable changes to the Environment Info extension for OutSystems 11 are documented here. Versions follow [Semantic Versioning](https://semver.org/) and match the versions published on OutSystems Forge.
 
+## [1.5.0]
+
+New actions only. The existing actions and structures are unchanged, so current consumers don't need to change anything.
+
+### Added
+
+- `IsDevelopmentEnvironment`, `IsNonProductionEnvironment` and `IsDisasterRecoveryEnvironment`: Boolean checks for the other server modes, usable directly in an If like `IsProductionEnvironment`. Use `IsDevelopmentEnvironment` to turn on debug features instead of "not `IsProductionEnvironment`", which is also True in Disaster Recovery.
+- `GetEnvironmentInfo`: the environment's name, key, hostname, Front-End name and server mode (Id, Name and one flag per mode) in one `EnvironmentInfo` structure. It reads the server mode once and has no request data, so it works the same in screens, Timers and BPTs.
+- `GetCurrentModuleInfo`: the running module's name, key, Id and published version Id, and its application's name and key, in a `ModuleInfo` structure. Logic in a library runs inside the module that calls it, so a library gets its consumer's details.
+- `GetRequestInfo`: the current HTTP request's method, scheme, host, port, path, query string, full URL, user agent, referrer and HTTPS flag, in a `RequestInfo` structure. `IsHttpRequest` is False outside a request (Timers, BPTs), and the rest is then empty.
+- Like the existing actions, none of the new ones throws: a value the platform can't provide is returned empty, 0 or False.
+
 ## [1.4.0]
 
 ### Added
@@ -26,5 +38,6 @@ The version on OutSystems Forge when this repository was created. Earlier versio
 
 Actions: `GetEnvironmentName`, `GetEnvironmentKey`, `GetEnvironmentHostname`, `GetEnvironmentServerMode`, `GetEnvironmentServerModes`, `IsProductionEnvironment`, `GetFrontEndName`, `GetClientIPAddress` and `GetRuntimeInfo`. Structures: `ServerMode` and `RuntimeInfo`.
 
+[1.5.0]: https://github.com/promonteiro89/environment-info-o11/releases/tag/v1.5.0
 [1.4.0]: https://github.com/promonteiro89/environment-info-o11/releases/tag/v1.4.0
 [1.3.0]: https://github.com/promonteiro89/environment-info-o11/tree/main

@@ -7,6 +7,178 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 	public class CssEnvironmentInfo_Ext: IssEnvironmentInfo_Ext {
 
 		/// <summary>
+		/// Checks whether the current environment&apos;s server mode is Development. Use it to turn on debug features: unlike &quot;not IsProductionEnvironment&quot;, it stays False in Disaster Recovery. Ideal for If widgets and conditions.
+		/// </summary>
+		/// <param name="ssIsDevelopmentEnvironment">True if the server mode is Development (Id 0). False otherwise, or if the platform context is unavailable.</param>
+		public void MssIsDevelopmentEnvironment(out bool ssIsDevelopmentEnvironment) {
+			ssIsDevelopmentEnvironment = false;
+			try {
+				AppInfo info = AppInfo.GetAppInfo();
+				ssIsDevelopmentEnvironment = info != null && info.ServerMode == ServerModes.Development;
+			} catch {
+				ssIsDevelopmentEnvironment = false;
+			}
+		} // MssIsDevelopmentEnvironment
+
+		/// <summary>
+		/// Checks whether the current environment&apos;s server mode is NonProduction, the mode usually used for QA and test environments. Ideal for If widgets and conditions.
+		/// </summary>
+		/// <param name="ssIsNonProductionEnvironment">True if the server mode is NonProduction (Id 1). False otherwise, or if the platform context is unavailable.</param>
+		public void MssIsNonProductionEnvironment(out bool ssIsNonProductionEnvironment) {
+			ssIsNonProductionEnvironment = false;
+			try {
+				AppInfo info = AppInfo.GetAppInfo();
+				ssIsNonProductionEnvironment = info != null && info.ServerMode == ServerModes.NonProduction;
+			} catch {
+				ssIsNonProductionEnvironment = false;
+			}
+		} // MssIsNonProductionEnvironment
+
+		/// <summary>
+		/// Checks whether the current environment&apos;s server mode is DisasterRecovery. Use it to pause Timers or integrations that must only run in the primary Production environment. Ideal for If widgets and conditions.
+		/// </summary>
+		/// <param name="ssIsDisasterRecoveryEnvironment">True if the server mode is DisasterRecovery (Id 2). False otherwise, or if the platform context is unavailable.</param>
+		public void MssIsDisasterRecoveryEnvironment(out bool ssIsDisasterRecoveryEnvironment) {
+			ssIsDisasterRecoveryEnvironment = false;
+			try {
+				AppInfo info = AppInfo.GetAppInfo();
+				ssIsDisasterRecoveryEnvironment = info != null && info.ServerMode == ServerModes.DisasterRecovery;
+			} catch {
+				ssIsDisasterRecoveryEnvironment = false;
+			}
+		} // MssIsDisasterRecoveryEnvironment
+
+		/// <summary>
+		/// Returns the current environment&apos;s name, key, hostname, Front-End name and server mode in one call, reading the server mode only once. Works the same in screens, Timers and BPTs. Keep it server-side: it describes your infrastructure.
+		/// </summary>
+		/// <param name="ssEnvironmentInfo">The environment&apos;s details. Values the platform can&apos;t provide are empty, 0 or False.</param>
+		public void MssGetEnvironmentInfo(out RCEnvironmentInfoRecord ssEnvironmentInfo) {
+			ssEnvironmentInfo = new RCEnvironmentInfoRecord(null);
+
+			// The hostname is read from configuration, not from the platform context, so it is
+			// filled even when the context is unavailable.
+			try {
+				ssEnvironmentInfo.ssSTEnvironmentInfo.ssHostname = new EspaceProperties().DefaultDnsName ?? "";
+			} catch {
+				ssEnvironmentInfo.ssSTEnvironmentInfo.ssHostname = "";
+			}
+
+			AppInfo info = null;
+			try {
+				info = AppInfo.GetAppInfo();
+			} catch {
+				info = null;
+			}
+
+			if (info != null) {
+				try {
+					ssEnvironmentInfo.ssSTEnvironmentInfo.ssEnvironmentName = info.EnvironmentName ?? "";
+					ssEnvironmentInfo.ssSTEnvironmentInfo.ssEnvironmentKey = info.EnvironmentKey ?? "";
+					ssEnvironmentInfo.ssSTEnvironmentInfo.ssFrontEndName = info.FrontendName ?? "";
+				} catch {
+				}
+
+				// Read the server mode once: it queries the database on every access.
+				try {
+					ServerModes mode = info.ServerMode;
+					ssEnvironmentInfo.ssSTEnvironmentInfo.ssServerModeId = (int)mode;
+					ssEnvironmentInfo.ssSTEnvironmentInfo.ssServerModeName = mode.ToString();
+					ssEnvironmentInfo.ssSTEnvironmentInfo.ssIsDevelopment = mode == ServerModes.Development;
+					ssEnvironmentInfo.ssSTEnvironmentInfo.ssIsNonProduction = mode == ServerModes.NonProduction;
+					ssEnvironmentInfo.ssSTEnvironmentInfo.ssIsDisasterRecovery = mode == ServerModes.DisasterRecovery;
+					ssEnvironmentInfo.ssSTEnvironmentInfo.ssIsProduction = mode == ServerModes.Production;
+				} catch {
+				}
+			}
+		} // MssGetEnvironmentInfo
+
+		/// <summary>
+		/// Returns the name, key and version of the module running the current request or Timer, and its application. Logic in a library runs inside the module that calls it, so a library gets its consumer&apos;s details. Useful for logs and audits.
+		/// </summary>
+		/// <param name="ssModuleInfo">The module and application details. Values the platform can&apos;t provide are empty or 0.</param>
+		public void MssGetCurrentModuleInfo(out RCModuleInfoRecord ssModuleInfo) {
+			ssModuleInfo = new RCModuleInfoRecord(null);
+
+			AppInfo info = null;
+			try {
+				info = AppInfo.GetAppInfo();
+			} catch {
+				info = null;
+			}
+			if (info == null) {
+				return;
+			}
+
+			try {
+				ssModuleInfo.ssSTModuleInfo.ssModuleName = info.eSpaceName ?? "";
+				ssModuleInfo.ssSTModuleInfo.ssModuleKey = info.eSpaceUID ?? "";
+				ssModuleInfo.ssSTModuleInfo.ssModuleId = info.eSpaceId;
+				ssModuleInfo.ssSTModuleInfo.ssModuleVersionId = info.eSpaceVersionId;
+				ssModuleInfo.ssSTModuleInfo.ssApplicationKey = info.ApplicationUID ?? "";
+			} catch {
+			}
+
+			// ApplicationName reads a platform setting, which can fail on its own.
+			try {
+				ssModuleInfo.ssSTModuleInfo.ssApplicationName = info.ApplicationName ?? "";
+			} catch {
+				ssModuleInfo.ssSTModuleInfo.ssApplicationName = "";
+			}
+		} // MssGetCurrentModuleInfo
+
+		/// <summary>
+		/// Returns details of the current HTTP request: method, scheme, host, port, path, query string, full URL, user agent, referrer and whether the connection used HTTPS. Outside a request (Timers, BPTs), IsHttpRequest is False and the rest is empty. Behind a load balancer, the scheme, host and port can be the internal ones, so don&apos;t use them to build links for emails: use GetEnvironmentHostname.
+		/// </summary>
+		/// <param name="ssRequestInfo">Details of the current request. Empty when there is no HTTP request.</param>
+		public void MssGetRequestInfo(out RCRequestInfoRecord ssRequestInfo) {
+			ssRequestInfo = new RCRequestInfoRecord(null);
+
+			HttpContext context = HttpContext.Current;
+			if (context == null) {
+				// No HTTP context: nothing to report.
+				return;
+			}
+
+			HttpRequest request;
+			try {
+				// Throws HttpException (it doesn't return null) when the context has no request.
+				request = context.Request;
+			} catch (HttpException) {
+				return;
+			}
+			if (request == null) {
+				return;
+			}
+
+			ssRequestInfo.ssSTRequestInfo.ssIsHttpRequest = true;
+
+			// The method and headers are independent of the URL, so a failing URL doesn't blank them.
+			try {
+				ssRequestInfo.ssSTRequestInfo.ssMethod = request.HttpMethod ?? "";
+				ssRequestInfo.ssSTRequestInfo.ssIsSecureConnection = request.IsSecureConnection;
+				ssRequestInfo.ssSTRequestInfo.ssUserAgent = request.UserAgent ?? "";
+				ssRequestInfo.ssSTRequestInfo.ssReferrer = request.Headers["Referer"] ?? "";
+			} catch {
+			}
+
+			// The URL parts are independent of the method and headers, so a failing one doesn't blank them.
+			try {
+				Uri url = request.Url;
+				if (url != null) {
+					ssRequestInfo.ssSTRequestInfo.ssUrl = url.AbsoluteUri;
+					ssRequestInfo.ssSTRequestInfo.ssScheme = url.Scheme;
+					ssRequestInfo.ssSTRequestInfo.ssHost = url.Host;
+					ssRequestInfo.ssSTRequestInfo.ssPort = url.Port;
+					ssRequestInfo.ssSTRequestInfo.ssPath = url.AbsolutePath;
+					string query = url.Query;
+					ssRequestInfo.ssSTRequestInfo.ssQueryString = query.StartsWith("?") ? query.Substring(1) : query;
+				}
+			} catch {
+			}
+		} // MssGetRequestInfo
+
+
+		/// <summary>
 		/// Returns the IP address of the client making the current HTTP request. When the platform's trusted proxies are enabled (as on OutSystems Cloud), X-Forwarded-For is read from the right through trusted proxies and CloudFront, so forged entries are ignored. Otherwise the first X-Forwarded-For entry is used, which the client can forge. Ports are stripped and invalid values fall back to the connection address. Returns an empty string when there is no HTTP request.
 		/// </summary>
 		/// <param name="ssIPAddress">Client IP address, or empty when there is no HTTP request.</param>

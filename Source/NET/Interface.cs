@@ -61,6 +61,42 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		/// <param name="ssRuntimeInfo">Server runtime details.</param>
 		void MssGetRuntimeInfo(out RCRuntimeInfoRecord ssRuntimeInfo);
 
+		/// <summary>
+		/// Checks whether the current environment&apos;s server mode is Development. Use it to turn on debug features: unlike &quot;not IsProductionEnvironment&quot;, it stays False in Disaster Recovery. Ideal for If widgets and conditions.
+		/// </summary>
+		/// <param name="ssIsDevelopmentEnvironment">True if the server mode is Development (Id 0). False otherwise, or if the platform context is unavailable.</param>
+		void MssIsDevelopmentEnvironment(out bool ssIsDevelopmentEnvironment);
+
+		/// <summary>
+		/// Checks whether the current environment&apos;s server mode is NonProduction, the mode usually used for QA and test environments. Ideal for If widgets and conditions.
+		/// </summary>
+		/// <param name="ssIsNonProductionEnvironment">True if the server mode is NonProduction (Id 1). False otherwise, or if the platform context is unavailable.</param>
+		void MssIsNonProductionEnvironment(out bool ssIsNonProductionEnvironment);
+
+		/// <summary>
+		/// Checks whether the current environment&apos;s server mode is DisasterRecovery. Use it to pause Timers or integrations that must only run in the primary Production environment. Ideal for If widgets and conditions.
+		/// </summary>
+		/// <param name="ssIsDisasterRecoveryEnvironment">True if the server mode is DisasterRecovery (Id 2). False otherwise, or if the platform context is unavailable.</param>
+		void MssIsDisasterRecoveryEnvironment(out bool ssIsDisasterRecoveryEnvironment);
+
+		/// <summary>
+		/// Returns the current environment&apos;s name, key, hostname, Front-End name and server mode in one call, reading the server mode only once. Works the same in screens, Timers and BPTs. Keep it server-side: it describes your infrastructure.
+		/// </summary>
+		/// <param name="ssEnvironmentInfo">The environment&apos;s details. Values the platform can&apos;t provide are empty, 0 or False.</param>
+		void MssGetEnvironmentInfo(out RCEnvironmentInfoRecord ssEnvironmentInfo);
+
+		/// <summary>
+		/// Returns the name, key and version of the module running the current request or Timer, and its application. Logic in a library runs inside the module that calls it, so a library gets its consumer&apos;s details. Useful for logs and audits.
+		/// </summary>
+		/// <param name="ssModuleInfo">The module and application details. Values the platform can&apos;t provide are empty or 0.</param>
+		void MssGetCurrentModuleInfo(out RCModuleInfoRecord ssModuleInfo);
+
+		/// <summary>
+		/// Returns details of the current HTTP request: method, scheme, host, port, path, query string, full URL, user agent, referrer and whether the connection used HTTPS. Outside a request (Timers, BPTs), IsHttpRequest is False and the rest is empty. Behind a load balancer, the scheme, host and port can be the internal ones, so don&apos;t use them to build links for emails: use GetEnvironmentHostname.
+		/// </summary>
+		/// <param name="ssRequestInfo">Details of the current request. Empty when there is no HTTP request.</param>
+		void MssGetRequestInfo(out RCRequestInfoRecord ssRequestInfo);
+
 	} // IssEnvironmentInfo_Ext
 
 } // OutSystems.NssEnvironmentInfo_Ext
