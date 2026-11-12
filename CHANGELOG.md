@@ -56,6 +56,7 @@ The version on OutSystems Forge when this repository was created. Earlier versio
 
 Actions: `GetEnvironmentName`, `GetEnvironmentKey`, `GetEnvironmentHostname`, `GetEnvironmentServerMode`, `GetEnvironmentServerModes`, `IsProductionEnvironment`, `GetFrontEndName`, `GetClientIPAddress` and `GetRuntimeInfo`. Structures: `ServerMode` and `RuntimeInfo`.
 
+[1.5.1]: https://github.com/promonteiro89/environment-info-o11/releases/tag/v1.5.1
 [1.5.0]: https://github.com/promonteiro89/environment-info-o11/releases/tag/v1.5.0
 [1.4.0]: https://github.com/promonteiro89/environment-info-o11/releases/tag/v1.4.0
 [1.3.0]: https://github.com/promonteiro89/environment-info-o11/tree/main
