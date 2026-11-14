@@ -11,8 +11,9 @@ Templates/
 # Integration Studio empty placeholder files
 %Name%.*
 
-# Build intermediates
+# Build intermediates and output (Bin is also where the platform assemblies are copied)
 Source/NET/obj/
+Source/NET/[Bb]in/
 Source/NET/Bin/*.pdb
 Source/NET/OutSystems.NssEnvironmentInfo_Ext.xml
 

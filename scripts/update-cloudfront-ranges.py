@@ -14,6 +14,7 @@ Only the standard library is used.
 """
 
 import argparse
+import http.client
 import ipaddress
 import json
 import os
@@ -189,12 +190,22 @@ def main(argv=None):
     )
     args = parser.parse_args(argv)
 
-    sync_token, create_date, prefixes, n_ipv4, n_ipv6 = load_ranges(args.input)
+    # Exit 1 is reserved for --check finding a difference. A feed that can't be read
+    # (network, HTTP, JSON or an unexpected shape) exits 2, so it is never taken for a
+    # range change.
+    try:
+        sync_token, create_date, prefixes, n_ipv4, n_ipv6 = load_ranges(args.input)
+    except (OSError, http.client.HTTPException, ValueError, KeyError, AttributeError, TypeError) as exc:
+        reason = "missing key %s" % exc if isinstance(exc, KeyError) else str(exc)
+        sys.stderr.write("error: cannot read the IP ranges: %s\n" % reason)
+        return 2
 
-    # An empty list would stop GetClientIPAddress from trusting CloudFront at all,
-    # so a feed without CloudFront ranges (truncated or reshaped) is an error.
-    if not prefixes:
-        sys.stderr.write("error: no %s ranges found in the input; nothing was written\n" % SERVICE)
+    # A list without IPv4 or without IPv6 would stop GetClientIPAddress from trusting
+    # CloudFront for that family, so a truncated or reshaped feed is an error.
+    if n_ipv4 == 0 or n_ipv6 == 0:
+        sys.stderr.write(
+            "error: expected both IPv4 and IPv6 %s ranges; nothing was written\n" % SERVICE
+        )
         return 2
 
     # Resolve the target path relative to the repo root (parent of scripts/).

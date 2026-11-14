@@ -1204,9 +1204,10 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 
 	/// <summary>
 	/// Structure <code>STRequestInfoStructure</code> that represents the Service Studio structure
-	///  <code>RequestInfo</code> <p> Description: Details of the current HTTP request, as the Front-En
-	/// d received it. Behind a load balancer, the scheme, host and port can be the internal ones. Empty
-	///  outside a request.</p>
+	///  <code>RequestInfo</code> <p> Description: Details of the current HTTP request. Host, Path
+	/// , QueryString, Url, UserAgent and Referrer come from what the client sent, so they can be forged.
+	///  Scheme, Port and IsSecureConnection describe the connection the Front-End received. Empty outside
+	/// a request.</p>
 	/// </summary>
 	[Serializable()]
 	public partial struct STRequestInfoStructure: ISerializable, ITypedRecord<STRequestInfoStructure>, ISimpleRecord {

@@ -41,6 +41,7 @@ tests/                              # Unit tests for the client IP resolver (run
 - Environment name, key, server mode, Front-End name and the module and application details come from the platform's `AppInfo`; the hostname is the environment's configured default DNS name (`EspaceProperties.DefaultDnsName`).
 - The extension has no inputs, no credentials, no Site Properties and no third-party dependencies, so there is nothing to configure.
 - Every action only reads state and can be called from any server action, screen, Timer or BPT. Only `GetClientIPAddress` and `GetRequestInfo` depend on the HTTP request.
+- A Service Action runs in the module that defines it, through an internal call from the caller's Front-End. There `GetCurrentModuleInfo` returns the defining module, and `GetRequestInfo` and `GetClientIPAddress` describe that internal call, not the visitor. Read the values in the calling module and pass them as inputs.
 - The platform reads the server mode from the system database on each call. If that read fails, the platform logs an error and reports `Development`.
 - These actions are server-side diagnostics. Don't return their values to anonymous users, client-side logic or public REST APIs: the environment key, hostname, Front-End name and runtime details help an attacker map your infrastructure.
 - Text outputs are never null: a value the platform can't provide is returned as an empty string.
@@ -113,6 +114,8 @@ Check for the other server modes. Like `IsProductionEnvironment`, each returns a
 
 Each returns False in every other mode, and when the platform context is unavailable.
 
+`IsNonProductionEnvironment` isn't the same as "not Production": it is False in Development and Disaster Recovery.
+
 If the platform can't read the server mode from the system database, it logs an error and reports Development. `IsDevelopmentEnvironment` then returns True, even in Production. Don't let it alone expose sensitive debug features, such as test endpoints or stack traces shown to users.
 
 #### `GetEnvironmentInfo`
@@ -140,9 +143,10 @@ Returns details of the current HTTP request.
 
 - Outside a request (Timers, BPTs), `IsHttpRequest` is False and every other attribute is empty.
 - In Reactive and Mobile apps, each data action or server action call from the browser is its own request. So the path and URL are those of that call (for example `/MyApp/screenservices/MyApp/MainFlow/Home/DataActionGetData`), not the URL of the screen the user sees.
-- The user agent and referrer are set by the client, so they can be forged.
-- The query string and URL can contain sensitive values, such as tokens. Don't log them blindly.
-- The scheme, host, port and `IsSecureConnection` describe the connection the Front-End received. Behind a load balancer or proxy that rewrites the host or ends HTTPS before the Front-End, they can be the internal ones, such as `http` and port 80 for an HTTPS visitor. To build links for emails, use `GetEnvironmentHostname` instead.
+- `Host`, `Path`, `QueryString`, `Url`, `UserAgent` and `Referrer` come from what the client sent, so they can be forged. `Host` is the `Host` header: don't trust it for redirects or callbacks.
+- `Scheme`, `Port` and `IsSecureConnection` describe the connection the Front-End received. Behind a load balancer or proxy that ends HTTPS before the Front-End, they can be the internal ones, such as `http` and port 80 for an HTTPS visitor.
+- Use `GetEnvironmentHostname` to build links, for example in emails.
+- The query string, URL and referrer can contain sensitive values, such as tokens. Don't log them blindly.
 
 #### `GetFrontEndName`
 Retrieves the name of the Front-End server running the current process. Meant for diagnostics, technical logging and auditing: in a request, it tells you which Front-End handled it; in a Timer or BPT, which Front-End ran the job.
@@ -151,10 +155,12 @@ Retrieves the name of the Front-End server running the current process. Meant fo
 |---|---|---|---|
 | `FrontEndName` | Out | Text | Name of the Front-End server |
 
+Keep it server-side: it is the server's machine name.
+
 #### `GetClientIPAddress`
 Returns the client IP address of the current HTTP request. It reads the `X-Forwarded-For` header in one of two ways, depending on the trusted proxies setting in Service Center:
 
-- **Trusted proxies enabled** (they are on OutSystems Cloud): the header is read from the right. The platform's trusted proxies and AWS CloudFront's origin-facing IP ranges are skipped, and the first other address is returned. Entries the client adds to the left are ignored.
+- **Trusted proxies enabled** (they are on OutSystems Cloud): the header is read from the right. The platform's trusted proxies are skipped, and so is one address from AWS CloudFront's origin-facing IP ranges. The first other address is returned. Entries the client adds to the left are ignored.
 - **Trusted proxies disabled** (the usual on-premises default): the first `X-Forwarded-For` entry is returned. The client can set that entry, so it can be forged.
 
 In both modes:
@@ -168,7 +174,11 @@ In both modes:
 |---|---|---|---|
 | `IPAddress` | Out | Text | Client IP address. Empty when there is no HTTP request |
 
-On OutSystems Cloud, the value is the real visitor's address. On-premises, it's only trustworthy for security decisions after you configure trusted proxies in Service Center.
+On OutSystems Cloud, the value is the real visitor's address when the request comes straight through OutSystems' CloudFront. On-premises, it's only trustworthy for security decisions after you configure trusted proxies in Service Center.
+
+Only one CloudFront hop is trusted. A request routed through a second CloudFront distribution, for example someone else's in front of your app, returns that distribution's address. The CloudFront ranges are compiled into the extension and trusted whenever trusted proxies are enabled, including on self-managed installs. There, a request that arrives through any CloudFront distribution can still set the address. Don't use the client IP alone for access control.
+
+**Changed in 1.5.2:** Only one CloudFront hop is trusted. If you run your own CloudFront distribution in front of OutSystems Cloud, the action now returns its address. To get the visitor's address back, add its ranges as trusted proxies in Service Center. CloudFront distributions share the same origin-facing ranges, so this also trusts every other distribution, as before 1.5.2.
 
 **Changed in 1.4.0:** On OutSystems Cloud, a request with a forged `X-Forwarded-For` header used to return the forged value. It now returns the real visitor. If you put your own CDN (Cloudflare, Akamai, and so on) in front of OutSystems Cloud, the action now returns that CDN's edge address. To get the visitor's address back, add the CDN's IP ranges as trusted proxies in Service Center.
 
@@ -177,7 +187,7 @@ Returns server runtime information, useful for support diagnostics.
 
 | Parameter | Direction | Type | Description |
 |---|---|---|---|
-| `RuntimeInfo` | Out | `RuntimeInfo` | CLR version, OS, machine name, CPU count and bitness. A value the server refuses to read is returned empty. |
+| `RuntimeInfo` | Out | `RuntimeInfo` | .NET Framework description (in `CLRVersion`, despite the name), OS, machine name, CPU count and bitness. A value the server refuses to read is returned empty. |
 
 ---
 
@@ -200,7 +210,7 @@ Prefer `IsProductionEnvironment` or comparing `Name` over hard-coding the Id.
 
 ### `RuntimeInfo`
 Runtime details of the server running the action.
-- `CLRVersion`: Text. Despite the name, this is the .NET Framework description (`RuntimeInformation.FrameworkDescription`, such as `.NET Framework 4.8.<build>.0`), not the CLR version
+- `CLRVersion`: Text. Despite the name, this is the .NET Framework description (`RuntimeInformation.FrameworkDescription`, such as `.NET Framework 4.8.9181.0`), not the CLR version
 - `OSVersion`: Text, from `Environment.OSVersion`
 - `MachineName`: Text, the Windows name of the server that ran the action
 - `ProcessorCount`: Integer
@@ -215,7 +225,7 @@ The current environment's details, returned by `GetEnvironmentInfo`.
 - `FrontEndName`: Text (250), the Front-End that ran the action
 - `ServerModeId`: Integer, see [`ServerMode`](#servermode) for the values
 - `ServerModeName`: Text (50)
-- `IsProduction`, `IsDevelopment`, `IsNonProduction`, `IsDisasterRecovery`: Boolean, one flag per server mode. All four are False in Management mode.
+- `IsProduction`, `IsDevelopment`, `IsNonProduction`, `IsDisasterRecovery`: Boolean, one flag per server mode. All four are False in Management mode, and when the platform context is unavailable (`ServerModeId` is then 0 and `ServerModeName` is empty).
 
 ### `ModuleInfo`
 The running module and its application, returned by `GetCurrentModuleInfo`.
@@ -231,13 +241,13 @@ The current HTTP request, returned by `GetRequestInfo`.
 - `IsHttpRequest`: Boolean, False outside a request
 - `Method`: Text (50), such as `GET` or `POST`
 - `Scheme`: Text (50), `http` or `https`
-- `Host`: Text (250)
-- `Port`: Integer
-- `Path`: Text (2000), such as `/MyApp/Home`
+- `Host`: Text (250), from the `Host` header the client sent. Don't trust it for redirects or callbacks.
+- `Port`: Integer, the port the Front-End received the request on
+- `Path`: Text (2000), such as `/MyApp/Home`. In Reactive and Mobile apps, it is the screen service path, not the screen URL.
 - `QueryString`: Text (2000), without the leading `?`
 - `Url`: Text (2000), the full request URL
 - `UserAgent`: Text (500)
-- `Referrer`: Text (2000), the `Referer` header
+- `Referrer`: Text (2000), the `Referer` header. Can contain tokens.
 - `IsSecureConnection`: Boolean, True if the connection to the Front-End used HTTPS
 
 ---
@@ -269,9 +279,10 @@ To publish:
 
 - Use the server mode to switch behaviour per environment instead of comparing the environment name, which differs between customers. Enable debug features with `IsDevelopmentEnvironment`, not whenever `IsProductionEnvironment` is False: that would also enable them in Disaster Recovery. Keep sensitive ones behind a role or a Site Property too, because a failed server mode read reports Development.
 - When you need several environment values, call `GetEnvironmentInfo` once instead of several separate actions: it reads the server mode from the database only once.
+- The server mode actions read the system database on every call. Don't call them in list rows or loops: read once into a variable.
 - Keep the outputs server-side. Don't show the environment key, hostname, Front-End name or runtime details to anonymous users or return them from public APIs.
 - Log `GetFrontEndName` with errors and audit entries to trace a request to the Front-End that served it.
-- On OutSystems Cloud, the IP can be used for auditing and rate limiting. On-premises, configure trusted proxies in Service Center before relying on it for security.
+- On OutSystems Cloud, the IP can be used for auditing and rate limiting. Don't use it alone for access control: a request through a second CloudFront distribution returns that distribution's address. On-premises, configure trusted proxies in Service Center before relying on it for security.
 
 ---
 

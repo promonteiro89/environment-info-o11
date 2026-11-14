@@ -2,6 +2,30 @@
 
 All notable changes to the Environment Info extension for OutSystems 11 are documented here. Versions follow [Semantic Versioning](https://semver.org/) and match the versions published on OutSystems Forge.
 
+## [1.5.2]
+
+Fixes only. No action or structure was added, removed or renamed.
+
+### Security
+
+- `GetClientIPAddress` trusted any number of AWS CloudFront addresses in `X-Forwarded-For`. A request sent through someone else's CloudFront distribution in front of OutSystems Cloud could set the returned address to any value. Now only one CloudFront hop is skipped, after the platform's trusted proxies. A request through a second CloudFront distribution now returns that distribution's address. If you run your own CloudFront in front of OutSystems Cloud, add its ranges as trusted proxies in Service Center to get the visitor's address back. CloudFront distributions share the same ranges, so this also trusts every other distribution, as 1.5.1 did.
+
+### Fixed
+
+- `scripts/update-cloudfront-ranges.py` exited 1, the code for "ranges changed", when it couldn't read the AWS feed, and showed a traceback. A network, JSON or format error now prints one error line and exits 2. The CI and monthly workflows only report a range change on exit 1.
+- The same script wrote the ranges when the feed had IPv4 ranges but no IPv6 ranges, or the other way round. It now stops with an error and leaves the file unchanged.
+- `GetClientIPAddress` accepted an IPv4 address with a `%scope` suffix, such as `1.2.3.4%eth0`. It is now treated as invalid. IPv6 scopes, such as `fe80::1%eth0`, are still removed.
+- Corrected descriptions in Service Studio. `RuntimeInfo.CLRVersion` is the .NET Framework description, not the CLR version. `RequestInfo.Host` comes from the client's `Host` header, `RequestInfo.Port` is the port the Front-End received, and `RequestInfo.Path` is the screen service path in Reactive and Mobile apps. `GetRequestInfo` and `RequestInfo` say which values the client can forge. `IsNonProductionEnvironment` and `GetFrontEndName` have a short note each.
+- The project now sets C# 6 as its language version, so newer syntax fails the build.
+
+### Documentation
+
+- `GetRequestInfo`: `Host`, `Path`, `QueryString`, `Url`, `UserAgent` and `Referrer` come from the client and can be forged. `Scheme`, `Port` and `IsSecureConnection` describe the connection the Front-End received. Use `GetEnvironmentHostname` to build links.
+- `GetClientIPAddress`: only one CloudFront hop is trusted, the CloudFront ranges are trusted whenever trusted proxies are enabled, also on self-managed installs, and the client IP alone shouldn't be used for access control.
+- Service Actions: `GetCurrentModuleInfo`, `GetRequestInfo` and `GetClientIPAddress` describe the Service Action's own module and internal call. Read the values in the calling module and pass them as inputs.
+- `EnvironmentInfo`: the four flags are also False when the platform context is unavailable.
+- Best Practices: don't call the server mode actions in list rows or loops.
+
 ## [1.5.1]
 
 Fixes for issues found in 1.5.0. No action or structure was added, removed or renamed.
@@ -56,6 +80,7 @@ The version on OutSystems Forge when this repository was created. Earlier versio
 
 Actions: `GetEnvironmentName`, `GetEnvironmentKey`, `GetEnvironmentHostname`, `GetEnvironmentServerMode`, `GetEnvironmentServerModes`, `IsProductionEnvironment`, `GetFrontEndName`, `GetClientIPAddress` and `GetRuntimeInfo`. Structures: `ServerMode` and `RuntimeInfo`.
 
+[1.5.2]: https://github.com/promonteiro89/environment-info-o11/releases/tag/v1.5.2
 [1.5.1]: https://github.com/promonteiro89/environment-info-o11/releases/tag/v1.5.1
 [1.5.0]: https://github.com/promonteiro89/environment-info-o11/releases/tag/v1.5.0
 [1.4.0]: https://github.com/promonteiro89/environment-info-o11/releases/tag/v1.4.0
