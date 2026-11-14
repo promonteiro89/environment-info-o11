@@ -21,7 +21,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		} // MssIsDevelopmentEnvironment
 
 		/// <summary>
-		/// Checks whether the current environment&apos;s server mode is NonProduction, the mode usually used for QA and test environments. Ideal for If widgets and conditions.
+		/// Checks whether the current environment&apos;s server mode is NonProduction, the mode usually used for QA and test environments. Ideal for If widgets and conditions. Not the same as &apos;not Production&apos;: it is False in Development and Disaster Recovery.
 		/// </summary>
 		/// <param name="ssIsNonProductionEnvironment">True if the server mode is NonProduction (Id 1). False otherwise, or if the platform context is unavailable.</param>
 		public void MssIsNonProductionEnvironment(out bool ssIsNonProductionEnvironment) {
@@ -127,7 +127,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		} // MssGetCurrentModuleInfo
 
 		/// <summary>
-		/// Returns details of the current HTTP request: method, scheme, host, port, path, query string, full URL, user agent, referrer and whether the connection used HTTPS. Outside a request (Timers, BPTs), IsHttpRequest is False and the rest is empty. Behind a load balancer, the scheme, host and port can be the internal ones, so don&apos;t use them to build links for emails: use GetEnvironmentHostname.
+		/// Returns details of the current HTTP request: method, scheme, host, port, path, query string, full URL, user agent, referrer and whether the connection used HTTPS. Outside a request (Timers, BPTs), IsHttpRequest is False and the rest is empty. Host, Path, QueryString, Url, UserAgent and Referrer come from what the client sent, so they can be forged. Scheme, Port and IsSecureConnection describe the connection the Front-End received, which behind a load balancer can be the internal one. Use GetEnvironmentHostname to build links. The query string, URL and referrer can contain tokens, so don&apos;t log them blindly.
 		/// </summary>
 		/// <param name="ssRequestInfo">Details of the current request. Empty when there is no HTTP request.</param>
 		public void MssGetRequestInfo(out RCRequestInfoRecord ssRequestInfo) {
@@ -178,7 +178,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		} // MssGetRequestInfo
 
 		/// <summary>
-		/// Returns the IP address of the client making the current HTTP request. When the platform's trusted proxies are enabled (as on OutSystems Cloud), X-Forwarded-For is read from the right through trusted proxies and CloudFront, so forged entries are ignored. Otherwise the first X-Forwarded-For entry is used, which the client can forge. Ports are stripped and invalid values fall back to the connection address. Returns an empty string when there is no HTTP request.
+		/// Returns the IP address of the client making the current HTTP request. When the platform&apos;s trusted proxies are enabled (as on OutSystems Cloud), X-Forwarded-For is read from the right: trusted proxies and at most one CloudFront hop are skipped, so forged entries are ignored. A request routed through a second CloudFront distribution returns that distribution&apos;s address. The CloudFront ranges are compiled into the extension and trusted whenever trusted proxies are enabled, also on self-managed installs. Otherwise the first X-Forwarded-For entry is used, which the client can forge. Ports are stripped and invalid values fall back to the connection address. Returns an empty string when there is no HTTP request. Don&apos;t use the IP alone for access control.
 		/// </summary>
 		/// <param name="ssIPAddress">Client IP address, or empty when there is no HTTP request.</param>
 		public void MssGetClientIPAddress(out string ssIPAddress) {
@@ -201,8 +201,8 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 				return;
 			}
 
-			// The platform's trusted-proxy rules (Service Center), with CloudFront's origin-facing
-			// ranges also trusted, so OutSystems Cloud returns the visitor and ignores forged headers.
+			// The platform's trusted-proxy rules (Service Center), plus one hop from CloudFront's
+			// origin-facing ranges, so OutSystems Cloud returns the visitor and ignores forged headers.
 			// Without trusted proxies, the first X-Forwarded-For entry (as before). See ClientIpResolver.
 			try {
 				ssIPAddress = ClientIpResolver.Resolve(
@@ -253,7 +253,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		} // MssGetRuntimeInfo
 
 		/// <summary>
-		/// Returns the name of the Front-End server running the current process: in a request, the Front-End that handled it; in a Timer or BPT, the one that ran the job. Use it for diagnostics, technical logging and auditing. Empty if the platform context is unavailable.
+		/// Returns the name of the Front-End server running the current process: in a request, the Front-End that handled it; in a Timer or BPT, the one that ran the job. Use it for diagnostics, technical logging and auditing. Empty if the platform context is unavailable. Keep it server-side: it is the server&apos;s machine name.
 		/// </summary>
 		/// <param name="ssFrontEndName">Name of the Front-End server.</param>
 		public void MssGetFrontEndName(out string ssFrontEndName) {
@@ -383,7 +383,15 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 					return normalizedFirst != "" ? normalizedFirst : remote;
 				}
 
-				if (remote == "" || !IsTrusted(remote, isPlatformTrustedProxy)) {
+				if (remote == "") {
+					return remote;
+				}
+
+				// Platform-trusted proxies are skipped without limit. An address that isn't
+				// platform-trusted is skipped only once, and only if it is in the CloudFront ranges,
+				// so a request through a second CloudFront distribution returns that distribution.
+				bool cloudFrontHopUsed = false;
+				if (!CanSkip(remote, isPlatformTrustedProxy, ref cloudFrontHopUsed)) {
 					return remote;
 				}
 
@@ -401,7 +409,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 						}
 
 						lastSeen = normalized;
-						if (!IsTrusted(normalized, isPlatformTrustedProxy)) {
+						if (!CanSkip(normalized, isPlatformTrustedProxy, ref cloudFrontHopUsed)) {
 							return normalized;
 						}
 
@@ -455,8 +463,12 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 					}
 				}
 
+				// A %scope suffix is valid only on IPv6, such as fe80::1%eth0.
 				int scope = candidate.IndexOf('%');
 				if (scope >= 0) {
+					if (candidate.IndexOf(':') < 0) {
+						return "";
+					}
 					candidate = candidate.Substring(0, scope);
 				}
 				if (candidate.IndexOf('.') < 0 && candidate.IndexOf(':') < 0) {
@@ -506,16 +518,28 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 			}
 		}
 
-		private static bool IsTrusted(string ip, System.Func<string, bool> isPlatformTrustedProxy) {
-			bool platformTrusted = false;
+		/// <summary>Determines whether the platform trusts an IP as a proxy, without throwing.</summary>
+		private static bool IsPlatformTrusted(string ip, System.Func<string, bool> isPlatformTrustedProxy) {
 			try {
-				if (isPlatformTrustedProxy != null) {
-					platformTrusted = isPlatformTrustedProxy(ip);
-				}
+				return isPlatformTrustedProxy != null && isPlatformTrustedProxy(ip);
 			} catch {
-				platformTrusted = false;
+				return false;
 			}
-			return platformTrusted || IsCloudFrontOriginFacing(ip);
+		}
+
+		/// <summary>
+		/// Determines whether an address can be skipped as a proxy: always when the platform trusts it,
+		/// otherwise only if it is CloudFront origin-facing and no CloudFront hop was skipped yet.
+		/// </summary>
+		private static bool CanSkip(string ip, System.Func<string, bool> isPlatformTrustedProxy, ref bool cloudFrontHopUsed) {
+			if (IsPlatformTrusted(ip, isPlatformTrustedProxy)) {
+				return true;
+			}
+			if (cloudFrontHopUsed || !IsCloudFrontOriginFacing(ip)) {
+				return false;
+			}
+			cloudFrontHopUsed = true;
+			return true;
 		}
 
 		private static bool IsValidPort(string port) {

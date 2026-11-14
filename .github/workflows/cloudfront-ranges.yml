@@ -19,10 +19,16 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
+      # Fails in both cases: exit 1 means the ranges changed, any other non-zero code means
+      # the feed couldn't be read.
       - name: Check CloudFront origin-facing ranges
-        run: python3 scripts/update-cloudfront-ranges.py --check
-
-      - name: Explain what to do
-        if: ${{ failure() }}
         run: |
-          echo "::error title=CloudFront ranges changed::The CloudFront origin-facing IP ranges changed (see the added/removed prefixes above). Run 'python3 scripts/update-cloudfront-ranges.py' locally, write the updated EnvironmentInfo_Ext.cs into the .xif, rebuild and release a new version."
+          set +e
+          python3 scripts/update-cloudfront-ranges.py --check
+          code=$?
+          if [ "$code" -eq 1 ]; then
+            echo "::error title=CloudFront ranges changed::The CloudFront origin-facing IP ranges changed (see the added/removed prefixes above). Run 'python3 scripts/update-cloudfront-ranges.py' locally, write the updated EnvironmentInfo_Ext.cs into the .xif, rebuild and release a new version."
+          elif [ "$code" -ne 0 ]; then
+            echo "::error title=CloudFront feed not read::The AWS IP ranges feed couldn't be read (exit code $code, see the error above). This is not a range change. Run the workflow again later."
+          fi
+          exit "$code"

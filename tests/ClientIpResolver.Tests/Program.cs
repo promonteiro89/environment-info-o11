@@ -58,6 +58,47 @@ namespace OutSystems.NssEnvironmentInfo_Ext.Tests {
 				return ClientIpResolver.Resolve("149.90.227.76, 64.252.126.100",
 					"10.0.0.5", true, false, ThrowingPredicate);
 			});
+
+			RunCloudFrontHopTable();
+		}
+
+		// ---- at most one CloudFront hop that the platform doesn't trust ----
+
+		private static void RunCloudFrontHopTable() {
+			Console.WriteLine("== Resolve: one CloudFront hop ==");
+
+			// Normal OutSystems Cloud chain: visitor, then OutSystems' CloudFront.
+			Row("cf1", true, false, "149.90.227.76, 64.252.126.100", "10.0.0.5", "149.90.227.76");
+
+			// A second CloudFront distribution in front: its address is returned, not the forged entry.
+			Row("cf2", true, false, "203.0.113.7, 64.252.126.100, 64.252.126.201", "10.0.0.5", "64.252.126.100");
+
+			Check("row cf3 (two IPv6 CloudFront hops)", ClientIpResolver.NormalizeIp(IPv6PrefixNetwork(0)), delegate {
+				return ClientIpResolver.Resolve("203.0.113.7, " + IPv6PrefixNetwork(0) + ", " + IPv6PrefixNetwork(1),
+					"10.0.0.5", true, false, IsInside10);
+			});
+
+			// The connection address itself is CloudFront and not platform-trusted: it uses the hop.
+			Row("cf4", true, false, "203.0.113.7, 64.252.126.100", "64.252.126.201", "64.252.126.100");
+			Row("cf4b", true, false, null, "64.252.126.201", "64.252.126.201");
+
+			// Platform-trusted proxies on both sides of one CloudFront hop.
+			Row("cf5", true, false, "149.90.227.76, 64.252.126.100, 10.0.0.9", "10.0.0.5", "149.90.227.76");
+
+			// All entries platform-trusted: fallback behaviour unchanged.
+			Row("cf6a", true, true, "10.0.0.7, 10.0.0.8", "10.0.0.5", "10.0.0.7");
+			Row("cf6b", true, false, "10.0.0.7, 10.0.0.8", "10.0.0.5", "10.0.0.5");
+			Row("cf6c", true, true, "10.0.0.7, 64.252.126.100, 10.0.0.8", "10.0.0.5", "10.0.0.7");
+
+			// A CloudFront address the platform also trusts doesn't use up the hop.
+			Check("row cf7 (platform-trusted CloudFront address)", "203.0.113.7", delegate {
+				return ClientIpResolver.Resolve("203.0.113.7, 64.252.126.100, 64.252.126.201",
+					"10.0.0.5", true, false, IsInside10Or64_252_126_201);
+			});
+
+			// An IPv4 address with a %scope is invalid, so the connection address is returned.
+			Row("cf8", true, false, "1.2.3.4%eth0", "10.0.0.5", "10.0.0.5");
+			Row("cf9", false, false, "1.2.3.4%eth0", "10.1.1.1", "10.1.1.1");
 		}
 
 		// ---- NormalizeIp extras ----
@@ -72,6 +113,10 @@ namespace OutSystems.NssEnvironmentInfo_Ext.Tests {
 			NormCase("[::1]:0", "");
 			NormCase("1.2.3.4:70000", "");
 			NormCase("fe80::1%eth0", "fe80::1");
+			NormCase("[fe80::1%eth0]:443", "fe80::1");
+			NormCase("1.2.3.4%eth0", "");
+			NormCase("1.2.3.4%eth0:80", "");
+			NormCase("[1.2.3.4%eth0]", "");
 			NormCase("UNKNOWN", "");
 			NormCase("::ffff:1.2.3.4", "1.2.3.4");
 			// Extra guards beyond the spec list.
@@ -126,19 +171,32 @@ namespace OutSystems.NssEnvironmentInfo_Ext.Tests {
 			return b.Length == 4 && b[0] == 10;
 		}
 
+		// Like IsInside10, and also trusts one CloudFront address.
+		private static bool IsInside10Or64_252_126_201(string ip) {
+			return IsInside10(ip) || ip == "64.252.126.201";
+		}
+
 		private static bool ThrowingPredicate(string ip) {
 			throw new InvalidOperationException("platform predicate exploded for " + ip);
 		}
 
 		// Network address of the first CloudFrontRanges prefix that contains ':'.
 		private static string FirstIPv6PrefixNetwork() {
+			return IPv6PrefixNetwork(0);
+		}
+
+		// Network address of the CloudFrontRanges prefix that is the n-th (0-based) to contain ':'.
+		private static string IPv6PrefixNetwork(int n) {
 			foreach (string prefix in CloudFrontRanges.Prefixes) {
 				if (prefix != null && prefix.IndexOf(':') >= 0) {
+					if (n-- > 0) {
+						continue;
+					}
 					int slash = prefix.IndexOf('/');
 					return slash >= 0 ? prefix.Substring(0, slash) : prefix;
 				}
 			}
-			throw new InvalidOperationException("no IPv6 prefix in CloudFrontRanges.Prefixes");
+			throw new InvalidOperationException("not enough IPv6 prefixes in CloudFrontRanges.Prefixes");
 		}
 
 		private static string Show(string s) {

@@ -18,8 +18,8 @@ jobs:
     permissions:
       contents: read
     env:
-      # Only whether the secret exists, never its value: the key itself is passed to the
-      # dependency checkout step alone, so the build step (which runs repository code) can't read it.
+      # Only whether the secret exists, never its value. Only pushes and pull requests from this
+      # repository receive the secret; pull requests from forks don't.
       HAS_OS_DEPS_KEY: ${{ secrets.OS_DEPS_SSH_KEY != '' }}
       IS_FORK_PR: ${{ github.event.pull_request.head.repo.fork == true }}
     steps:
@@ -46,6 +46,8 @@ jobs:
           repository: promonteiro89/outsystems-platform-deps
           ssh-key: ${{ secrets.OS_DEPS_SSH_KEY }}
           path: os-deps
+          # The later steps only copy files from os-deps, so the key isn't kept in its git config.
+          persist-credentials: false
 
       - name: Place platform assemblies in Bin
         if: env.HAS_OS_DEPS_KEY == 'true'
@@ -81,5 +83,15 @@ jobs:
         run: bash tests/run.sh
 
       # Warning only: an upstream change to the CloudFront ranges must not fail CI.
+      # Exit 1 means the ranges changed; any other non-zero code means the feed couldn't be read.
       - name: CloudFront ranges up to date (warning only)
-        run: python3 scripts/update-cloudfront-ranges.py --check || echo "::warning::CloudFront ranges changed upstream; see the CloudFront ranges workflow."
+        run: |
+          set +e
+          python3 scripts/update-cloudfront-ranges.py --check
+          code=$?
+          if [ "$code" -eq 1 ]; then
+            echo "::warning::CloudFront ranges changed upstream; see the CloudFront ranges workflow."
+          elif [ "$code" -ne 0 ]; then
+            echo "::warning::The AWS IP ranges feed couldn't be read (exit code $code, see the error above). This is not a range change."
+          fi
+          exit 0
