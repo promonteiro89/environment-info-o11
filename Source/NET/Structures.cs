@@ -527,6 +527,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		internal static readonly GlobalObjectKey IdIsDevelopment = GlobalObjectKey.Parse("+5MgcGVYykaq2P9qp0CZPQ*eSOR5I6fhUq+2_FavweT5Q");
 		internal static readonly GlobalObjectKey IdIsNonProduction = GlobalObjectKey.Parse("+5MgcGVYykaq2P9qp0CZPQ*2kiUuELsmkOH4JRD2m0DPw");
 		internal static readonly GlobalObjectKey IdIsDisasterRecovery = GlobalObjectKey.Parse("+5MgcGVYykaq2P9qp0CZPQ*AekZcut46k6vkTJbMh90bA");
+		internal static readonly GlobalObjectKey IdIsManagement = GlobalObjectKey.Parse("+5MgcGVYykaq2P9qp0CZPQ*4Ond5bR8kkWHsbVDnINahQ");
 
 		public static void EnsureInitialized() {}
 		[System.Xml.Serialization.XmlElement("EnvironmentName")]
@@ -559,6 +560,9 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		[System.Xml.Serialization.XmlElement("IsDisasterRecovery")]
 		public bool ssIsDisasterRecovery;
 
+		[System.Xml.Serialization.XmlElement("IsManagement")]
+		public bool ssIsManagement;
+
 
 		public BitArray OptimizedAttributes;
 
@@ -574,6 +578,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 			ssIsDevelopment = false;
 			ssIsNonProduction = false;
 			ssIsDisasterRecovery = false;
+			ssIsManagement = false;
 		}
 
 		public BitArray[] GetDefaultOptimizedValues() {
@@ -609,6 +614,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 			ssIsDevelopment = r.ReadBoolean(index++, "EnvironmentInfo.IsDevelopment", false);
 			ssIsNonProduction = r.ReadBoolean(index++, "EnvironmentInfo.IsNonProduction", false);
 			ssIsDisasterRecovery = r.ReadBoolean(index++, "EnvironmentInfo.IsDisasterRecovery", false);
+			ssIsManagement = r.ReadBoolean(index++, "EnvironmentInfo.IsManagement", false);
 		}
 		/// <summary>
 		/// Read from database
@@ -639,6 +645,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 			if (a.ssIsDevelopment != b.ssIsDevelopment) return false;
 			if (a.ssIsNonProduction != b.ssIsNonProduction) return false;
 			if (a.ssIsDisasterRecovery != b.ssIsDisasterRecovery) return false;
+			if (a.ssIsManagement != b.ssIsManagement) return false;
 			return true;
 		}
 
@@ -664,6 +671,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 				^ ssIsDevelopment.GetHashCode()
 				^ ssIsNonProduction.GetHashCode()
 				^ ssIsDisasterRecovery.GetHashCode()
+				^ ssIsManagement.GetHashCode()
 				;
 			} catch {
 				return base.GetHashCode();
@@ -691,6 +699,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 			ssIsDevelopment = false;
 			ssIsNonProduction = false;
 			ssIsDisasterRecovery = false;
+			ssIsManagement = false;
 			Type objInfo = this.GetType();
 			FieldInfo fieldInfo = null;
 			fieldInfo = objInfo.GetField("ssEnvironmentName", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Public);
@@ -763,6 +772,13 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 			if (fieldInfo.FieldType.IsSerializable) {
 				ssIsDisasterRecovery = (bool) info.GetValue(fieldInfo.Name, fieldInfo.FieldType);
 			}
+			fieldInfo = objInfo.GetField("ssIsManagement", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Public);
+			if (fieldInfo == null) {
+				throw new Exception("The field named 'ssIsManagement' was not found.");
+			}
+			if (fieldInfo.FieldType.IsSerializable) {
+				ssIsManagement = (bool) info.GetValue(fieldInfo.Name, fieldInfo.FieldType);
+			}
 		}
 
 		public void RecursiveReset() {
@@ -784,6 +800,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 			t.ssIsDevelopment = this.ssIsDevelopment;
 			t.ssIsNonProduction = this.ssIsNonProduction;
 			t.ssIsDisasterRecovery = this.ssIsDisasterRecovery;
+			t.ssIsManagement = this.ssIsManagement;
 			t.OptimizedAttributes = null;
 			return t;
 		}
@@ -809,6 +826,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 				if (!VarValue.FieldIsOptimized(parent, fieldName + ".IsDevelopment")) VarValue.AppendAttribute(recordElem, "IsDevelopment", ssIsDevelopment, detailLevel, TypeKind.Boolean); else VarValue.AppendOptimizedAttribute(recordElem, "IsDevelopment");
 				if (!VarValue.FieldIsOptimized(parent, fieldName + ".IsNonProduction")) VarValue.AppendAttribute(recordElem, "IsNonProduction", ssIsNonProduction, detailLevel, TypeKind.Boolean); else VarValue.AppendOptimizedAttribute(recordElem, "IsNonProduction");
 				if (!VarValue.FieldIsOptimized(parent, fieldName + ".IsDisasterRecovery")) VarValue.AppendAttribute(recordElem, "IsDisasterRecovery", ssIsDisasterRecovery, detailLevel, TypeKind.Boolean); else VarValue.AppendOptimizedAttribute(recordElem, "IsDisasterRecovery");
+				if (!VarValue.FieldIsOptimized(parent, fieldName + ".IsManagement")) VarValue.AppendAttribute(recordElem, "IsManagement", ssIsManagement, detailLevel, TypeKind.Boolean); else VarValue.AppendOptimizedAttribute(recordElem, "IsManagement");
 			} else {
 				VarValue.AppendDeferredEvaluationElement(recordElem);
 			}
@@ -838,6 +856,8 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 				if (!VarValue.FieldIsOptimized(parent, baseName + ".IsNonProduction")) variable.Value = ssIsNonProduction; else variable.Optimized = true;
 			} else if (head == "isdisasterrecovery") {
 				if (!VarValue.FieldIsOptimized(parent, baseName + ".IsDisasterRecovery")) variable.Value = ssIsDisasterRecovery; else variable.Optimized = true;
+			} else if (head == "ismanagement") {
+				if (!VarValue.FieldIsOptimized(parent, baseName + ".IsManagement")) variable.Value = ssIsManagement; else variable.Optimized = true;
 			}
 			if (variable.Found && tail != null) variable.EvaluateFields(this, head, tail);
 		}
@@ -871,6 +891,8 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 				return ssIsNonProduction;
 			} else if (key == IdIsDisasterRecovery) {
 				return ssIsDisasterRecovery;
+			} else if (key == IdIsManagement) {
+				return ssIsManagement;
 			} else {
 				throw new Exception("Invalid key");
 			}
@@ -887,6 +909,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 			ssIsDevelopment = (bool) other.AttributeGet(IdIsDevelopment);
 			ssIsNonProduction = (bool) other.AttributeGet(IdIsNonProduction);
 			ssIsDisasterRecovery = (bool) other.AttributeGet(IdIsDisasterRecovery);
+			ssIsManagement = (bool) other.AttributeGet(IdIsManagement);
 		}
 		public bool IsDefault() {
 			STEnvironmentInfoStructure defaultStruct = new STEnvironmentInfoStructure(null);
@@ -900,6 +923,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 			if (this.ssIsDevelopment != defaultStruct.ssIsDevelopment) return false;
 			if (this.ssIsNonProduction != defaultStruct.ssIsNonProduction) return false;
 			if (this.ssIsDisasterRecovery != defaultStruct.ssIsDisasterRecovery) return false;
+			if (this.ssIsManagement != defaultStruct.ssIsManagement) return false;
 			return true;
 		}
 	} // STEnvironmentInfoStructure
@@ -1206,8 +1230,9 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 	/// Structure <code>STRequestInfoStructure</code> that represents the Service Studio structure
 	///  <code>RequestInfo</code> <p> Description: Details of the current HTTP request. Host, Path
 	/// , QueryString, Url, UserAgent and Referrer come from what the client sent, so they can be forged.
-	///  Scheme, Port and IsSecureConnection describe the connection the Front-End received. Empty outside
-	/// a request.</p>
+	///  Scheme, Port and IsSecureConnection describe the connection the Front-End received. Empty whe
+	/// n there is no HTTP request. Timers and BPT activities run inside an internal platform request, so
+	///  the values then describe that request: check IsBackgroundJob.</p>
 	/// </summary>
 	[Serializable()]
 	public partial struct STRequestInfoStructure: ISerializable, ITypedRecord<STRequestInfoStructure>, ISimpleRecord {
@@ -1222,6 +1247,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		internal static readonly GlobalObjectKey IdUserAgent = GlobalObjectKey.Parse("+5MgcGVYykaq2P9qp0CZPQ*QhJFHL0uDUeXd20MNWnfKA");
 		internal static readonly GlobalObjectKey IdReferrer = GlobalObjectKey.Parse("+5MgcGVYykaq2P9qp0CZPQ*h_ay5NdIzE+sH2HXwDN6zg");
 		internal static readonly GlobalObjectKey IdIsSecureConnection = GlobalObjectKey.Parse("+5MgcGVYykaq2P9qp0CZPQ*hZLx3OSRC0KnHSCbIosR0w");
+		internal static readonly GlobalObjectKey IdIsBackgroundJob = GlobalObjectKey.Parse("+5MgcGVYykaq2P9qp0CZPQ*GYryPhCE0Eq6rnQLTyCeGA");
 
 		public static void EnsureInitialized() {}
 		[System.Xml.Serialization.XmlElement("IsHttpRequest")]
@@ -1257,6 +1283,9 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		[System.Xml.Serialization.XmlElement("IsSecureConnection")]
 		public bool ssIsSecureConnection;
 
+		[System.Xml.Serialization.XmlElement("IsBackgroundJob")]
+		public bool ssIsBackgroundJob;
+
 
 		public BitArray OptimizedAttributes;
 
@@ -1273,6 +1302,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 			ssUserAgent = "";
 			ssReferrer = "";
 			ssIsSecureConnection = false;
+			ssIsBackgroundJob = false;
 		}
 
 		public BitArray[] GetDefaultOptimizedValues() {
@@ -1309,6 +1339,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 			ssUserAgent = r.ReadText(index++, "RequestInfo.UserAgent", "");
 			ssReferrer = r.ReadText(index++, "RequestInfo.Referrer", "");
 			ssIsSecureConnection = r.ReadBoolean(index++, "RequestInfo.IsSecureConnection", false);
+			ssIsBackgroundJob = r.ReadBoolean(index++, "RequestInfo.IsBackgroundJob", false);
 		}
 		/// <summary>
 		/// Read from database
@@ -1340,6 +1371,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 			if (a.ssUserAgent != b.ssUserAgent) return false;
 			if (a.ssReferrer != b.ssReferrer) return false;
 			if (a.ssIsSecureConnection != b.ssIsSecureConnection) return false;
+			if (a.ssIsBackgroundJob != b.ssIsBackgroundJob) return false;
 			return true;
 		}
 
@@ -1366,6 +1398,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 				^ ssUserAgent.GetHashCode()
 				^ ssReferrer.GetHashCode()
 				^ ssIsSecureConnection.GetHashCode()
+				^ ssIsBackgroundJob.GetHashCode()
 				;
 			} catch {
 				return base.GetHashCode();
@@ -1394,6 +1427,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 			ssUserAgent = "";
 			ssReferrer = "";
 			ssIsSecureConnection = false;
+			ssIsBackgroundJob = false;
 			Type objInfo = this.GetType();
 			FieldInfo fieldInfo = null;
 			fieldInfo = objInfo.GetField("ssIsHttpRequest", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Public);
@@ -1473,6 +1507,13 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 			if (fieldInfo.FieldType.IsSerializable) {
 				ssIsSecureConnection = (bool) info.GetValue(fieldInfo.Name, fieldInfo.FieldType);
 			}
+			fieldInfo = objInfo.GetField("ssIsBackgroundJob", BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Public);
+			if (fieldInfo == null) {
+				throw new Exception("The field named 'ssIsBackgroundJob' was not found.");
+			}
+			if (fieldInfo.FieldType.IsSerializable) {
+				ssIsBackgroundJob = (bool) info.GetValue(fieldInfo.Name, fieldInfo.FieldType);
+			}
 		}
 
 		public void RecursiveReset() {
@@ -1495,6 +1536,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 			t.ssUserAgent = this.ssUserAgent;
 			t.ssReferrer = this.ssReferrer;
 			t.ssIsSecureConnection = this.ssIsSecureConnection;
+			t.ssIsBackgroundJob = this.ssIsBackgroundJob;
 			t.OptimizedAttributes = null;
 			return t;
 		}
@@ -1521,6 +1563,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 				if (!VarValue.FieldIsOptimized(parent, fieldName + ".UserAgent")) VarValue.AppendAttribute(recordElem, "UserAgent", ssUserAgent, detailLevel, TypeKind.Text); else VarValue.AppendOptimizedAttribute(recordElem, "UserAgent");
 				if (!VarValue.FieldIsOptimized(parent, fieldName + ".Referrer")) VarValue.AppendAttribute(recordElem, "Referrer", ssReferrer, detailLevel, TypeKind.Text); else VarValue.AppendOptimizedAttribute(recordElem, "Referrer");
 				if (!VarValue.FieldIsOptimized(parent, fieldName + ".IsSecureConnection")) VarValue.AppendAttribute(recordElem, "IsSecureConnection", ssIsSecureConnection, detailLevel, TypeKind.Boolean); else VarValue.AppendOptimizedAttribute(recordElem, "IsSecureConnection");
+				if (!VarValue.FieldIsOptimized(parent, fieldName + ".IsBackgroundJob")) VarValue.AppendAttribute(recordElem, "IsBackgroundJob", ssIsBackgroundJob, detailLevel, TypeKind.Boolean); else VarValue.AppendOptimizedAttribute(recordElem, "IsBackgroundJob");
 			} else {
 				VarValue.AppendDeferredEvaluationElement(recordElem);
 			}
@@ -1552,6 +1595,8 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 				if (!VarValue.FieldIsOptimized(parent, baseName + ".Referrer")) variable.Value = ssReferrer; else variable.Optimized = true;
 			} else if (head == "issecureconnection") {
 				if (!VarValue.FieldIsOptimized(parent, baseName + ".IsSecureConnection")) variable.Value = ssIsSecureConnection; else variable.Optimized = true;
+			} else if (head == "isbackgroundjob") {
+				if (!VarValue.FieldIsOptimized(parent, baseName + ".IsBackgroundJob")) variable.Value = ssIsBackgroundJob; else variable.Optimized = true;
 			}
 			if (variable.Found && tail != null) variable.EvaluateFields(this, head, tail);
 		}
@@ -1587,6 +1632,8 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 				return ssReferrer;
 			} else if (key == IdIsSecureConnection) {
 				return ssIsSecureConnection;
+			} else if (key == IdIsBackgroundJob) {
+				return ssIsBackgroundJob;
 			} else {
 				throw new Exception("Invalid key");
 			}
@@ -1604,6 +1651,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 			ssUserAgent = (string) other.AttributeGet(IdUserAgent);
 			ssReferrer = (string) other.AttributeGet(IdReferrer);
 			ssIsSecureConnection = (bool) other.AttributeGet(IdIsSecureConnection);
+			ssIsBackgroundJob = (bool) other.AttributeGet(IdIsBackgroundJob);
 		}
 		public bool IsDefault() {
 			STRequestInfoStructure defaultStruct = new STRequestInfoStructure(null);
@@ -1618,6 +1666,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 			if (this.ssUserAgent != defaultStruct.ssUserAgent) return false;
 			if (this.ssReferrer != defaultStruct.ssReferrer) return false;
 			if (this.ssIsSecureConnection != defaultStruct.ssIsSecureConnection) return false;
+			if (this.ssIsBackgroundJob != defaultStruct.ssIsBackgroundJob) return false;
 			return true;
 		}
 	} // STRequestInfoStructure

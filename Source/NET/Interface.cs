@@ -50,7 +50,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		void MssGetFrontEndName(out string ssFrontEndName);
 
 		/// <summary>
-		/// Returns the IP address of the client making the current HTTP request. When the platform&apos;s trusted proxies are enabled (as on OutSystems Cloud), X-Forwarded-For is read from the right: trusted proxies and at most one CloudFront hop are skipped, so forged entries are ignored. A request routed through a second CloudFront distribution returns that distribution&apos;s address. The CloudFront ranges are compiled into the extension and trusted whenever trusted proxies are enabled, also on self-managed installs. Otherwise the first X-Forwarded-For entry is used, which the client can forge. Ports are stripped and invalid values fall back to the connection address. Returns an empty string when there is no HTTP request. Don&apos;t use the IP alone for access control.
+		/// Returns the IP address of the client making the current HTTP request. When the platform&apos;s trusted proxies are enabled (as on OutSystems Cloud), X-Forwarded-For is read from the right: trusted proxies and at most one CloudFront hop are skipped, so forged entries are ignored. A request routed through a second CloudFront distribution returns that distribution&apos;s address. The CloudFront ranges are compiled into the extension and trusted whenever trusted proxies are enabled, also on self-managed installs. Otherwise the first X-Forwarded-For entry is used, which the client can forge. Ports are stripped and invalid values fall back to the connection address. In a Timer or BPT activity it returns the address of the platform&apos;s internal request, usually 127.0.0.1. Returns an empty string when there is no HTTP request. Don&apos;t use the IP alone for access control.
 		/// </summary>
 		/// <param name="ssIPAddress">Client IP address, or empty when there is no HTTP request.</param>
 		void MssGetClientIPAddress(out string ssIPAddress);
@@ -92,10 +92,22 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		void MssGetCurrentModuleInfo(out RCModuleInfoRecord ssModuleInfo);
 
 		/// <summary>
-		/// Returns details of the current HTTP request: method, scheme, host, port, path, query string, full URL, user agent, referrer and whether the connection used HTTPS. Outside a request (Timers, BPTs), IsHttpRequest is False and the rest is empty. Host, Path, QueryString, Url, UserAgent and Referrer come from what the client sent, so they can be forged. Scheme, Port and IsSecureConnection describe the connection the Front-End received, which behind a load balancer can be the internal one. Use GetEnvironmentHostname to build links. The query string, URL and referrer can contain tokens, so don&apos;t log them blindly.
+		/// Returns details of the current HTTP request: method, scheme, host, port, path, query string, full URL, user agent, referrer and whether the connection used HTTPS. Timers and BPT activities run inside an internal platform request: there IsHttpRequest and IsBackgroundJob are True and the values describe that internal request, not a visitor. Host, Path, QueryString, Url, UserAgent and Referrer come from what the client sent, so they can be forged. Scheme, Port and IsSecureConnection describe the connection the Front-End received, which behind a load balancer can be the internal one. Use GetEnvironmentHostname to build links. The query string, URL and referrer can contain tokens, so don&apos;t log them blindly.
 		/// </summary>
 		/// <param name="ssRequestInfo">Details of the current request. Empty when there is no HTTP request.</param>
 		void MssGetRequestInfo(out RCRequestInfoRecord ssRequestInfo);
+
+		/// <summary>
+		/// Checks whether the current environment&apos;s server mode is Management, the mode usually used by the environment that runs LifeTime. Ideal for If widgets and conditions.
+		/// </summary>
+		/// <param name="ssIsManagementEnvironment">True if the server mode is Management (Id 3). False otherwise, or if the platform context is unavailable.</param>
+		void MssIsManagementEnvironment(out bool ssIsManagementEnvironment);
+
+		/// <summary>
+		/// Returns the platform&apos;s key for the current request, the same Request Key that Service Center shows in its logs. Store it with your own log and audit records to find the platform&apos;s logs for the same request. Returns an empty string when no request key is available.
+		/// </summary>
+		/// <param name="ssRequestKey">The current request&apos;s key, or empty when none is available.</param>
+		void MssGetRequestKey(out string ssRequestKey);
 
 	} // IssEnvironmentInfo_Ext
 

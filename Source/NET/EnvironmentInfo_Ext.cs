@@ -7,6 +7,35 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 	public class CssEnvironmentInfo_Ext: IssEnvironmentInfo_Ext {
 
 		/// <summary>
+		/// Checks whether the current environment&apos;s server mode is Management, the mode usually used by the environment that runs LifeTime. Ideal for If widgets and conditions.
+		/// </summary>
+		/// <param name="ssIsManagementEnvironment">True if the server mode is Management (Id 3). False otherwise, or if the platform context is unavailable.</param>
+		public void MssIsManagementEnvironment(out bool ssIsManagementEnvironment) {
+			ssIsManagementEnvironment = false;
+			try {
+				AppInfo info = AppInfo.GetAppInfo();
+				ssIsManagementEnvironment = info != null && info.ServerMode == ServerModes.Management;
+			} catch {
+				ssIsManagementEnvironment = false;
+			}
+		} // MssIsManagementEnvironment
+
+		/// <summary>
+		/// Returns the platform&apos;s key for the current request, the same Request Key that Service Center shows in its logs. Store it with your own log and audit records to find the platform&apos;s logs for the same request. Returns an empty string when no request key is available.
+		/// </summary>
+		/// <param name="ssRequestKey">The current request&apos;s key, or empty when none is available.</param>
+		public void MssGetRequestKey(out string ssRequestKey) {
+			ssRequestKey = "";
+			// The platform's public API for the key of the request events it logs. It returns an
+			// empty string when there is no request tracer.
+			try {
+				ssRequestKey = OutSystems.RuntimePublic.Request.GetRequestKey() ?? "";
+			} catch {
+				ssRequestKey = "";
+			}
+		} // MssGetRequestKey
+
+		/// <summary>
 		/// Checks whether the current environment&apos;s server mode is Development. Unlike &quot;not IsProductionEnvironment&quot;, it stays False in Disaster Recovery. Ideal for If widgets and conditions. If the platform can&apos;t read the server mode, it reports Development, so this also returns True then: don&apos;t let it alone expose sensitive debug features.
 		/// </summary>
 		/// <param name="ssIsDevelopmentEnvironment">True if the server mode is Development (Id 0), including when the platform can&apos;t read the server mode and reports Development. False otherwise, or if the platform context is unavailable.</param>
@@ -87,6 +116,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 					ssEnvironmentInfo.ssSTEnvironmentInfo.ssIsNonProduction = mode == ServerModes.NonProduction;
 					ssEnvironmentInfo.ssSTEnvironmentInfo.ssIsDisasterRecovery = mode == ServerModes.DisasterRecovery;
 					ssEnvironmentInfo.ssSTEnvironmentInfo.ssIsProduction = mode == ServerModes.Production;
+					ssEnvironmentInfo.ssSTEnvironmentInfo.ssIsManagement = mode == ServerModes.Management;
 				} catch {
 				}
 			}
@@ -127,7 +157,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		} // MssGetCurrentModuleInfo
 
 		/// <summary>
-		/// Returns details of the current HTTP request: method, scheme, host, port, path, query string, full URL, user agent, referrer and whether the connection used HTTPS. Outside a request (Timers, BPTs), IsHttpRequest is False and the rest is empty. Host, Path, QueryString, Url, UserAgent and Referrer come from what the client sent, so they can be forged. Scheme, Port and IsSecureConnection describe the connection the Front-End received, which behind a load balancer can be the internal one. Use GetEnvironmentHostname to build links. The query string, URL and referrer can contain tokens, so don&apos;t log them blindly.
+		/// Returns details of the current HTTP request: method, scheme, host, port, path, query string, full URL, user agent, referrer and whether the connection used HTTPS. Timers and BPT activities run inside an internal platform request: there IsHttpRequest and IsBackgroundJob are True and the values describe that internal request, not a visitor. Host, Path, QueryString, Url, UserAgent and Referrer come from what the client sent, so they can be forged. Scheme, Port and IsSecureConnection describe the connection the Front-End received, which behind a load balancer can be the internal one. Use GetEnvironmentHostname to build links. The query string, URL and referrer can contain tokens, so don&apos;t log them blindly.
 		/// </summary>
 		/// <param name="ssRequestInfo">Details of the current request. Empty when there is no HTTP request.</param>
 		public void MssGetRequestInfo(out RCRequestInfoRecord ssRequestInfo) {
@@ -161,6 +191,18 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 			} catch {
 			}
 
+			// The platform runs Timers and BPT activities through an internal request to these
+			// handlers at the module root. The executing file path excludes any path info, so a
+			// visitor can't fake it by appending the handler name to a screen URL.
+			try {
+				string handler = request.AppRelativeCurrentExecutionFilePath ?? "";
+				ssRequestInfo.ssSTRequestInfo.ssIsBackgroundJob =
+					string.Equals(handler, "~/_TimerHandler.asmx", StringComparison.OrdinalIgnoreCase)
+					|| string.Equals(handler, "~/_ActivityHandler.asmx", StringComparison.OrdinalIgnoreCase);
+			} catch {
+				ssRequestInfo.ssSTRequestInfo.ssIsBackgroundJob = false;
+			}
+
 			// The URL parts are independent of the method and headers, so a failing one doesn't blank them.
 			try {
 				Uri url = request.Url;
@@ -178,7 +220,7 @@ namespace OutSystems.NssEnvironmentInfo_Ext {
 		} // MssGetRequestInfo
 
 		/// <summary>
-		/// Returns the IP address of the client making the current HTTP request. When the platform&apos;s trusted proxies are enabled (as on OutSystems Cloud), X-Forwarded-For is read from the right: trusted proxies and at most one CloudFront hop are skipped, so forged entries are ignored. A request routed through a second CloudFront distribution returns that distribution&apos;s address. The CloudFront ranges are compiled into the extension and trusted whenever trusted proxies are enabled, also on self-managed installs. Otherwise the first X-Forwarded-For entry is used, which the client can forge. Ports are stripped and invalid values fall back to the connection address. Returns an empty string when there is no HTTP request. Don&apos;t use the IP alone for access control.
+		/// Returns the IP address of the client making the current HTTP request. When the platform&apos;s trusted proxies are enabled (as on OutSystems Cloud), X-Forwarded-For is read from the right: trusted proxies and at most one CloudFront hop are skipped, so forged entries are ignored. A request routed through a second CloudFront distribution returns that distribution&apos;s address. The CloudFront ranges are compiled into the extension and trusted whenever trusted proxies are enabled, also on self-managed installs. Otherwise the first X-Forwarded-For entry is used, which the client can forge. Ports are stripped and invalid values fall back to the connection address. In a Timer or BPT activity it returns the address of the platform&apos;s internal request, usually 127.0.0.1. Returns an empty string when there is no HTTP request. Don&apos;t use the IP alone for access control.
 		/// </summary>
 		/// <param name="ssIPAddress">Client IP address, or empty when there is no HTTP request.</param>
 		public void MssGetClientIPAddress(out string ssIPAddress) {

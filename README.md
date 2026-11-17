@@ -40,7 +40,8 @@ tests/                              # Unit tests for the client IP resolver (run
 
 - Environment name, key, server mode, Front-End name and the module and application details come from the platform's `AppInfo`; the hostname is the environment's configured default DNS name (`EspaceProperties.DefaultDnsName`).
 - The extension has no inputs, no credentials, no Site Properties and no third-party dependencies, so there is nothing to configure.
-- Every action only reads state and can be called from any server action, screen, Timer or BPT. Only `GetClientIPAddress` and `GetRequestInfo` depend on the HTTP request.
+- Every action only reads state and can be called from any server action, screen, Timer or BPT. Only `GetClientIPAddress`, `GetRequestInfo` and `GetRequestKey` depend on the HTTP request.
+- The platform runs Timers and BPT activities through an internal HTTP request to the module (`_TimerHandler.asmx` and `_ActivityHandler.asmx`). So there is an HTTP request there too: `GetRequestInfo` and `GetClientIPAddress` describe that internal request, and `RequestInfo.IsBackgroundJob` is True.
 - A Service Action runs in the module that defines it, through an internal call from the caller's Front-End. There `GetCurrentModuleInfo` returns the defining module, and `GetRequestInfo` and `GetClientIPAddress` describe that internal call, not the visitor. Read the values in the calling module and pass them as inputs.
 - The platform reads the server mode from the system database on each call. If that read fails, the platform logs an error and reports `Development`.
 - These actions are server-side diagnostics. Don't return their values to anonymous users, client-side logic or public REST APIs: the environment key, hostname, Front-End name and runtime details help an attacker map your infrastructure.
@@ -103,7 +104,7 @@ Checks whether the environment is configured as a Production environment. It ret
 
 It returns False in every other mode, including Disaster Recovery. So "not production" isn't the same as "development": to switch on debug features, use `IsDevelopmentEnvironment` rather than negating this action.
 
-#### `IsDevelopmentEnvironment`, `IsNonProductionEnvironment`, `IsDisasterRecoveryEnvironment`
+#### `IsDevelopmentEnvironment`, `IsNonProductionEnvironment`, `IsDisasterRecoveryEnvironment`, `IsManagementEnvironment`
 Check for the other server modes. Like `IsProductionEnvironment`, each returns a Boolean you can use directly in an If.
 
 | Action | Output (Boolean) | True when the server mode is |
@@ -111,6 +112,7 @@ Check for the other server modes. Like `IsProductionEnvironment`, each returns a
 | `IsDevelopmentEnvironment` | `IsDevelopmentEnvironment` | Development (Id 0) |
 | `IsNonProductionEnvironment` | `IsNonProductionEnvironment` | NonProduction (Id 1), the mode usually used for QA and test environments |
 | `IsDisasterRecoveryEnvironment` | `IsDisasterRecoveryEnvironment` | DisasterRecovery (Id 2) |
+| `IsManagementEnvironment` | `IsManagementEnvironment` | Management (Id 3), the mode usually used by the environment that runs LifeTime |
 
 Each returns False in every other mode, and when the platform context is unavailable.
 
@@ -141,12 +143,22 @@ Returns details of the current HTTP request.
 |---|---|---|---|
 | `RequestInfo` | Out | [`RequestInfo`](#requestinfo) | The request's details. Empty when there is no HTTP request |
 
-- Outside a request (Timers, BPTs), `IsHttpRequest` is False and every other attribute is empty.
+- In a Timer or BPT activity, `IsHttpRequest` and `IsBackgroundJob` are True, and the values describe the platform's internal request that runs the job (for example `http`, port 80 and the path `/MyApp/_TimerHandler.asmx`), not a visitor. Before 1.6.0 this page said `IsHttpRequest` was False there, which was wrong.
+- When there is no HTTP request at all, `IsHttpRequest` is False and every other attribute is empty.
 - In Reactive and Mobile apps, each data action or server action call from the browser is its own request. So the path and URL are those of that call (for example `/MyApp/screenservices/MyApp/MainFlow/Home/DataActionGetData`), not the URL of the screen the user sees.
 - `Host`, `Path`, `QueryString`, `Url`, `UserAgent` and `Referrer` come from what the client sent, so they can be forged. `Host` is the `Host` header: don't trust it for redirects or callbacks.
 - `Scheme`, `Port` and `IsSecureConnection` describe the connection the Front-End received. Behind a load balancer or proxy that ends HTTPS before the Front-End, they can be the internal ones, such as `http` and port 80 for an HTTPS visitor.
 - Use `GetEnvironmentHostname` to build links, for example in emails.
 - The query string, URL and referrer can contain sensitive values, such as tokens. Don't log them blindly.
+
+#### `GetRequestKey`
+Returns the platform's key for the current request, the same Request Key that Service Center shows in its logs. Store it with your own log and audit records to find the platform's logs for the same request.
+
+| Parameter | Direction | Type | Description |
+|---|---|---|---|
+| `RequestKey` | Out | Text | The current request's key. Empty when none is available |
+
+It uses the platform's public `OutSystems.RuntimePublic.Request.GetRequestKey` API. Each request gets its own key, and a Timer run gets one too.
 
 #### `GetFrontEndName`
 Retrieves the name of the Front-End server running the current process. Meant for diagnostics, technical logging and auditing: in a request, it tells you which Front-End handled it; in a Timer or BPT, which Front-End ran the job.
@@ -172,7 +184,7 @@ In both modes:
 
 | Parameter | Direction | Type | Description |
 |---|---|---|---|
-| `IPAddress` | Out | Text | Client IP address. Empty when there is no HTTP request |
+| `IPAddress` | Out | Text | Client IP address. In a Timer or BPT activity, the address of the platform's internal request, usually `127.0.0.1`. Empty when there is no HTTP request |
 
 On OutSystems Cloud, the value is the real visitor's address when the request comes straight through OutSystems' CloudFront. On-premises, it's only trustworthy for security decisions after you configure trusted proxies in Service Center.
 
@@ -225,7 +237,7 @@ The current environment's details, returned by `GetEnvironmentInfo`.
 - `FrontEndName`: Text (250), the Front-End that ran the action
 - `ServerModeId`: Integer, see [`ServerMode`](#servermode) for the values
 - `ServerModeName`: Text (50)
-- `IsProduction`, `IsDevelopment`, `IsNonProduction`, `IsDisasterRecovery`: Boolean, one flag per server mode. All four are False in Management mode, and when the platform context is unavailable (`ServerModeId` is then 0 and `ServerModeName` is empty).
+- `IsProduction`, `IsDevelopment`, `IsNonProduction`, `IsDisasterRecovery`, `IsManagement`: Boolean, one flag per server mode. All five are False when the platform context is unavailable (`ServerModeId` is then 0 and `ServerModeName` is empty). `IsManagement` was added in 1.6.0.
 
 ### `ModuleInfo`
 The running module and its application, returned by `GetCurrentModuleInfo`.
@@ -238,7 +250,7 @@ The running module and its application, returned by `GetCurrentModuleInfo`.
 
 ### `RequestInfo`
 The current HTTP request, returned by `GetRequestInfo`.
-- `IsHttpRequest`: Boolean, False outside a request
+- `IsHttpRequest`: Boolean. True in an HTTP request, including the internal one that runs a Timer or BPT activity
 - `Method`: Text (50), such as `GET` or `POST`
 - `Scheme`: Text (50), `http` or `https`
 - `Host`: Text (250), from the `Host` header the client sent. Don't trust it for redirects or callbacks.
@@ -249,6 +261,7 @@ The current HTTP request, returned by `GetRequestInfo`.
 - `UserAgent`: Text (500)
 - `Referrer`: Text (2000), the `Referer` header. Can contain tokens.
 - `IsSecureConnection`: Boolean, True if the connection to the Front-End used HTTPS
+- `IsBackgroundJob`: Boolean, True when the request is the platform's internal call that runs a Timer or a BPT activity. It is read from the request path, so use it for logs, not as a security check. Added in 1.6.0.
 
 ---
 
