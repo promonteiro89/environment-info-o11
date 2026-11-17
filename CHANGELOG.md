@@ -2,6 +2,21 @@
 
 All notable changes to the Environment Info extension for OutSystems 11 are documented here. Versions follow [Semantic Versioning](https://semver.org/) and match the versions published on OutSystems Forge.
 
+## [1.6.0]
+
+Nothing was removed or renamed, so upgrading needs no changes in your modules.
+
+### Added
+
+- `IsManagementEnvironment`: True when the server mode is Management (Id 3), the mode usually used by the environment that runs LifeTime. It completes the set of server mode checks.
+- `EnvironmentInfo.IsManagement`: the matching flag in the structure returned by `GetEnvironmentInfo`. It is the last attribute, so the order of the existing ones is unchanged.
+- `GetRequestKey`: the platform's key for the current request, the same Request Key that Service Center shows in its logs. Store it with your own log and audit records to find the platform's logs for the same request. Empty when no request key is available.
+- `RequestInfo.IsBackgroundJob`: True when the request is the platform's internal call that runs a Timer or a BPT activity. It is the last attribute of `RequestInfo`.
+
+### Documentation
+
+- `GetRequestInfo` and `GetClientIPAddress` in Timers and BPT activities. The platform runs them through an internal HTTP request, so `IsHttpRequest` is True there and the values describe that request: `http`, port 80, a path such as `/MyApp/_TimerHandler.asmx`, and the client IP `127.0.0.1`. Earlier versions documented `IsHttpRequest` as False and the IP as empty. The behaviour is unchanged; use `IsBackgroundJob` to tell a job from a visitor.
+
 ## [1.5.2]
 
 Fixes only. No action or structure was added, removed or renamed.
@@ -80,6 +95,7 @@ The version on OutSystems Forge when this repository was created. Earlier versio
 
 Actions: `GetEnvironmentName`, `GetEnvironmentKey`, `GetEnvironmentHostname`, `GetEnvironmentServerMode`, `GetEnvironmentServerModes`, `IsProductionEnvironment`, `GetFrontEndName`, `GetClientIPAddress` and `GetRuntimeInfo`. Structures: `ServerMode` and `RuntimeInfo`.
 
+[1.6.0]: https://github.com/promonteiro89/environment-info-o11/releases/tag/v1.6.0
 [1.5.2]: https://github.com/promonteiro89/environment-info-o11/releases/tag/v1.5.2
 [1.5.1]: https://github.com/promonteiro89/environment-info-o11/releases/tag/v1.5.1
 [1.5.0]: https://github.com/promonteiro89/environment-info-o11/releases/tag/v1.5.0
